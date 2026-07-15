@@ -26,6 +26,7 @@
 | 🟢 | README.md |
 | 🟢 | CLAUDE.md |
 | 🟢 | ESPECIFICACAO.md |
+| 🟢 | Revisão da Arquitetura |
 
 ---
 
@@ -33,10 +34,10 @@
 
 | Status | Item |
 |--------|------|
-| ⚪ | Arquitetura Geral |
-| ⚪ | Fluxo dos Módulos |
-| ⚪ | Estrutura Interna dos Dados |
-| ⚪ | Comunicação entre Módulos |
+| 🟢 | Arquitetura Geral |
+| 🟢 | Fluxo dos Módulos |
+| 🟢 | Estrutura Interna dos Dados |
+| 🟢 | Comunicação entre Módulos |
 
 ---
 

@@ -27,34 +27,55 @@ A planilha original nunca será alterada.
 - PyInstaller
 - Git
 - GitHub
+- JSON (armazenamento das configurações)
 
 ---
 
 # Estrutura do Projeto
 
-```
+```text
 CalculadoraHorasQualimix/
 
 assets/
+    logo/
+    icones/
+
 dados/
+    empresa.json
+    configuracoes.json
+    funcionarios.json
+    turnos.json
+    versao.json
+
+backup/
+
 Historico/
+
 Logs/
 
 README.md
 CLAUDE.md
 ESPECIFICACAO.md
+TODO.md
 
 main.py
 interface.py
+
+tela_principal.py
+tela_configuracoes.py
+tela_funcionarios.py
+tela_historico.py
+tela_sobre.py
+
 config.py
+cadastro.py
+validacao.py
 leitor_ponto.py
 calculadora.py
 relatorio.py
 
 requirements.txt
 ```
-
----
 
 # Funcionalidades
 

@@ -1,0 +1,23 @@
+# Ambiente Virtual
+.venv/
+
+# Cache do Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Arquivos temporarios
+*.log
+
+# Pastas geradas pelo sistema
+Logs/
+Historico/
+backup/
+
+# Configuracoes locais opcionais
+.vscode/
+
+# Build
+build/
+dist/
+*.spec
