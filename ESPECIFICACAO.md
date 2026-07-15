@@ -1716,3 +1716,56 @@ Esta versão deverá ser totalmente funcional para utilização diária na empre
 ---
 
 # FIM DA ESPECIFICAÇÃO
+# CAPÍTULO 20
+
+# ARQUITETURA DE COMUNICAÇÃO
+
+A Calculadora de Horas Extras Qualimix será composta por módulos independentes.
+
+Cada módulo terá apenas uma responsabilidade.
+
+A comunicação ocorrerá sempre através de estruturas de dados padronizadas.
+
+Fluxo Geral
+
+main.py
+
+↓
+
+interface.py
+
+↓
+
+tela_principal.py
+
+↓
+
+config.py
+
+↓
+
+leitor_ponto.py
+
+↓
+
+validacao.py
+
+↓
+
+cadastro.py
+
+↓
+
+calculadora.py
+
+↓
+
+relatorio.py
+
+↓
+
+Historico
+
+↓
+
+Logs
