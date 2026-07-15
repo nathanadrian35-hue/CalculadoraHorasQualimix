@@ -21,3 +21,13 @@ backup/
 build/
 dist/
 *.spec
+
+# Dados gerados pela aplica‡Æo
+dados/
+backup/
+Historico/
+Logs/
+
+# Cache do Python
+__pycache__/
+*.pyc
