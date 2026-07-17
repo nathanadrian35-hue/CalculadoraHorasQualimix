@@ -89,7 +89,9 @@ def _padrao_configuracoes() -> dict[str, Any]:
     return {
         "turnos": [],  # lista de dicts — ver turno_para_dict()/turno_de_dict()
         "tolerancia_entrada": {"ativa": False, "minutos": 0},
-        "tolerancia_almoco": {"ativa": False, "minutos": 0},
+        "tolerancia_saida_almoco": {"ativa": False, "minutos": 0},
+        "tolerancia_almoco": {"ativa": False, "minutos": 0},  # retorno do almoço (nome histórico)
+        "tolerancia_saida": {"ativa": False, "minutos": 0},
         "pasta_historico": str(HISTORICO_DIR),
         "tema": "dark",
         "primeira_execucao": True,

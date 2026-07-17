@@ -1107,7 +1107,8 @@ class TelaConfiguracoes(ctk.CTkFrame):
         chaves_por_etapa: dict[int, list[str]] = {
             1: ["empresa"],
             2: ["turnos"],
-            3: ["tolerancia_entrada", "tolerancia_almoco"],
+            3: ["tolerancia_entrada", "tolerancia_saida_almoco", "tolerancia_almoco",
+                "tolerancia_saida"],
             4: ["historico"],
         }
         chaves = chaves_por_etapa.get(self._wizard_indice)
@@ -1164,13 +1165,25 @@ class TelaConfiguracoes(ctk.CTkFrame):
     # -- Etapa 4: Tolerâncias (reaproveita Etapa 2.1/2.2) -------------------------
 
     def _montar_etapa_wizard_tolerancias(self, master) -> ctk.CTkFrame:
-        """Etapa 4: tolerâncias de entrada e de intervalo (Cap. 4.7/4.8)."""
-        etapa = ctk.CTkFrame(master, fg_color="transparent")
+        """
+        Etapa 4: tolerâncias de jornada (Cap. 4.7) — quatro grupos
+        independentes, cada um opcional: Entrada, Saída para o Almoço,
+        Retorno do Almoço e Saída Final. Todos reaproveitam o mesmo
+        componente `_montar_bloco_tolerancia` (Etapa 2.1/2.2), sem
+        nenhuma lógica de campo nova.
+        """
+        etapa = ctk.CTkScrollableFrame(master, fg_color="transparent")
         self._montar_bloco_tolerancia(
             etapa, chave="entrada", titulo="Tolerância de Entrada",
         ).pack(fill="x", pady=(0, 15))
         self._montar_bloco_tolerancia(
-            etapa, chave="almoco", titulo="Tolerância do Intervalo",
+            etapa, chave="saida_almoco", titulo="Tolerância de Saída para o Almoço",
+        ).pack(fill="x", pady=(0, 15))
+        self._montar_bloco_tolerancia(
+            etapa, chave="almoco", titulo="Tolerância de Retorno do Almoço",
+        ).pack(fill="x", pady=(0, 15))
+        self._montar_bloco_tolerancia(
+            etapa, chave="saida", titulo="Tolerância de Saída Final",
         ).pack(fill="x")
         return etapa
 
@@ -1216,7 +1229,9 @@ class TelaConfiguracoes(ctk.CTkFrame):
         tem_logo = self.obter_logo_selecionada() is not None or bool(self._logo_caminho_atual)
         turnos = self.obter_turnos()
         ativa_entrada, minutos_entrada = self.obter_tolerancia("entrada")
+        ativa_saida_almoco, minutos_saida_almoco = self.obter_tolerancia("saida_almoco")
         ativa_almoco, minutos_almoco = self.obter_tolerancia("almoco")
+        ativa_saida, minutos_saida = self.obter_tolerancia("saida")
         usar_padrao, pasta_personalizada = self.obter_pasta_historico()
 
         linhas = [
@@ -1228,8 +1243,16 @@ class TelaConfiguracoes(ctk.CTkFrame):
                 f"{minutos_entrada} minutos" if ativa_entrada else "Desativada",
             ),
             (
-                "Tolerância Intervalo",
+                "Tolerância Saída Almoço",
+                f"{minutos_saida_almoco} minutos" if ativa_saida_almoco else "Desativada",
+            ),
+            (
+                "Tolerância Retorno Almoço",
                 f"{minutos_almoco} minutos" if ativa_almoco else "Desativada",
+            ),
+            (
+                "Tolerância Saída Final",
+                f"{minutos_saida} minutos" if ativa_saida else "Desativada",
             ),
             (
                 "Histórico",
@@ -1251,7 +1274,7 @@ class TelaConfiguracoes(ctk.CTkFrame):
         """
         Ação do botão "Concluir Configuração" (Etapa 6): valida tudo; se
         houver erro, informa e não avança. Se estiver tudo correto,
-        persiste os dados (Cap. 4.9) e segue para a etapa de Conclusão.
+        persiste os dados (Cap. 4.8) e segue para a etapa de Conclusão.
         """
         if not self.esta_tudo_valido():
             self._rotulo_erro_resumo.configure(
@@ -1270,7 +1293,7 @@ class TelaConfiguracoes(ctk.CTkFrame):
         """
         Persiste Empresa/Logo/Turnos/Tolerâncias/Histórico usando
         exclusivamente os métodos e funções já existentes em config.py
-        (Cap. 4.9/12.5) — reaproveitado tanto pela conclusão do Wizard
+        (Cap. 4.8/12.5) — reaproveitado tanto pela conclusão do Wizard
         quanto pelo modo de edição, sem duplicar a lógica de
         persistência entre os dois. Não decide nada sobre
         primeira_execucao nem sobre navegação; isso é responsabilidade
@@ -1287,15 +1310,11 @@ class TelaConfiguracoes(ctk.CTkFrame):
             turno_para_dict(turno) for turno in self.obter_turnos()
         ]
 
-        ativa_entrada, minutos_entrada = self.obter_tolerancia("entrada")
-        self.config_app.configuracoes["tolerancia_entrada"] = {
-            "ativa": ativa_entrada, "minutos": minutos_entrada,
-        }
-
-        ativa_almoco, minutos_almoco = self.obter_tolerancia("almoco")
-        self.config_app.configuracoes["tolerancia_almoco"] = {
-            "ativa": ativa_almoco, "minutos": minutos_almoco,
-        }
+        for chave in ("entrada", "saida_almoco", "almoco", "saida"):
+            ativa, minutos = self.obter_tolerancia(chave)
+            self.config_app.configuracoes[f"tolerancia_{chave}"] = {
+                "ativa": ativa, "minutos": minutos,
+            }
 
         usar_padrao, pasta_personalizada = self.obter_pasta_historico()
         self.config_app.configuracoes["pasta_historico"] = (
@@ -1304,7 +1323,7 @@ class TelaConfiguracoes(ctk.CTkFrame):
 
     def _salvar_configuracao_inicial(self) -> None:
         """
-        Ação do botão "Concluir Configuração" do Wizard (Cap. 4.9):
+        Ação do botão "Concluir Configuração" do Wizard (Cap. 4.8):
         persiste os dados coletados e marca primeira_execucao como
         concluída (concluir_primeira_execucao() já grava
         configuracoes.json).
@@ -1330,7 +1349,7 @@ class TelaConfiguracoes(ctk.CTkFrame):
         return etapa
 
     def _wizard_ir_para_principal(self) -> None:
-        """Encerra o Wizard e abre a Tela Principal (Cap. 4.9)."""
+        """Encerra o Wizard e abre a Tela Principal (Cap. 4.8)."""
         self.controlador.mostrar_tela("principal")
 
     # -- Modo de Edição (Cap. 12.5) -----------------------------------------------
@@ -1357,7 +1376,9 @@ class TelaConfiguracoes(ctk.CTkFrame):
             turno_de_dict(dados) for dados in self.config_app.configuracoes.get("turnos", [])
         ]
         tolerancia_entrada = self.config_app.configuracoes.get("tolerancia_entrada", {})
+        tolerancia_saida_almoco = self.config_app.configuracoes.get("tolerancia_saida_almoco", {})
         tolerancia_almoco = self.config_app.configuracoes.get("tolerancia_almoco", {})
+        tolerancia_saida = self.config_app.configuracoes.get("tolerancia_saida", {})
         pasta_historico_atual = (
             self.config_app.configuracoes.get("pasta_historico") or str(HISTORICO_DIR)
         )
@@ -1376,9 +1397,19 @@ class TelaConfiguracoes(ctk.CTkFrame):
             minutos_inicial=int(tolerancia_entrada.get("minutos") or 0),
         ).pack(fill="x", pady=(0, 15))
         self._montar_bloco_tolerancia(
-            corpo, chave="almoco", titulo="Tolerância do Intervalo",
+            corpo, chave="saida_almoco", titulo="Tolerância de Saída para o Almoço",
+            ativa_inicial=bool(tolerancia_saida_almoco.get("ativa", False)),
+            minutos_inicial=int(tolerancia_saida_almoco.get("minutos") or 0),
+        ).pack(fill="x", pady=(0, 15))
+        self._montar_bloco_tolerancia(
+            corpo, chave="almoco", titulo="Tolerância de Retorno do Almoço",
             ativa_inicial=bool(tolerancia_almoco.get("ativa", False)),
             minutos_inicial=int(tolerancia_almoco.get("minutos") or 0),
+        ).pack(fill="x", pady=(0, 15))
+        self._montar_bloco_tolerancia(
+            corpo, chave="saida", titulo="Tolerância de Saída Final",
+            ativa_inicial=bool(tolerancia_saida.get("ativa", False)),
+            minutos_inicial=int(tolerancia_saida.get("minutos") or 0),
         ).pack(fill="x", pady=(0, 15))
         self._montar_bloco_historico(
             corpo, pasta_inicial=pasta_historico_atual, usar_padrao_inicial=usar_padrao_inicial,
@@ -1410,7 +1441,7 @@ class TelaConfiguracoes(ctk.CTkFrame):
     def _salvar_edicao(self) -> None:
         """
         Ação do botão "Salvar Alterações" (Cap. 12.5): persiste tudo de
-        uma vez, com os mesmos métodos já usados pelo Wizard (Cap. 4.9),
+        uma vez, com os mesmos métodos já usados pelo Wizard (Cap. 4.8),
         sem alterar primeira_execucao e sem sair da tela — o usuário
         pode continuar editando ou fechar quando quiser.
         """

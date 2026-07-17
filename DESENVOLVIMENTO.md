@@ -393,6 +393,60 @@ de nome no Painel de Revisão), Histórico inalterado, análise estática
 
 ---
 
+# SPRINT 7 (v1.1)
+
+## Objetivo
+
+Completar as tolerâncias de jornada: a v1.0 só cobria Entrada e Retorno
+do Almoço; faltavam Saída para o Almoço e Saída Final. Implementadas
+as duas, reaproveitando integralmente a função `_aplicar_tolerancia()`
+e a regra de faixa de aceitação já existentes (Cap. 8) — nenhuma
+lógica de cálculo nova, apenas os dois pontos que faltavam. Motor
+refatorado para uma estrutura orientada a dados (`_pontos_tolerancia()`)
+para os 4 pontos não repetirem código entre si.
+
+### Arquivos
+
+- calculadora.py (`_pontos_tolerancia()` novo; `recalcular_dia()`
+  aplica os 4 pontos num único laço, sem duplicar a leitura/aplicação
+  de tolerância)
+- config.py (`tolerancia_saida_almoco`/`tolerancia_saida` no padrão de
+  `configuracoes.json` — retrocompatível via o mecanismo de merge já
+  existente, nenhuma configuração antiga é apagada)
+- tela_configuracoes.py (dois novos grupos "Saída para o Almoço" e
+  "Saída Final" no Wizard e no modo de edição, reaproveitando
+  `_montar_bloco_tolerancia()`; resumo do Wizard atualizado)
+- ESPECIFICACAO.md (Cap. 4.7 consolidado em "Tolerâncias de Jornada";
+  Cap. 8 com as 4 tolerâncias: 8.1 Entrada, 8.2 Saída Almoço, 8.3
+  Retorno Almoço, 8.4 Saída Final)
+
+### Funcionalidades
+
+- Tolerância de Saída para o Almoço (faixa de aceitação em torno do
+  horário previsto de saída para o intervalo)
+- Tolerância de Saída Final (faixa de aceitação em torno do horário
+  previsto de saída do dia, com ou sem intervalo)
+- As quatro tolerâncias — Entrada, Saída Almoço, Retorno Almoço, Saída
+  Final — totalmente independentes, configuráveis e opcionais
+- Retrocompatibilidade automática: `configuracoes.json` de uma
+  instalação v1.0 ganha as duas chaves novas (desativadas) na primeira
+  leitura, sem apagar nada
+
+### Critério de conclusão
+
+Testes unitários dos 4 pontos de tolerância com os valores exatos
+pedidos (janelas de 6 horários por ponto, incluindo a borda que sai da
+faixa), homologação com a planilha real de Julho/2026 (comparação
+manual entre a batida original da planilha e o Relatório Diário
+exportado, confirmando batidas reais preservadas e horas ajustadas
+corretas), reprocessamento via Tela de Pendências, Dashboard/
+Competências/Histórico sem alteração estrutural, regressão com
+tolerâncias desativadas reproduzindo exatamente o comportamento do
+v1.0, análise estática (pyflakes/pycodestyle/mypy) limpa em todos os
+arquivos.
+
+---
+
 # REGRAS
 
 - Seguir obrigatoriamente o README.md.

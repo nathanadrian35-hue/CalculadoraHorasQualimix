@@ -402,11 +402,13 @@ pelo Turno como um todo — nunca pelo dia da semana isoladamente.
 
 ---
 
-## 4.7 Tolerância de Entrada
+## 4.7 Tolerâncias de Jornada
 
-O sistema perguntará:
+O sistema perguntará, para cada um dos quatro pontos da jornada —
+**Entrada**, **Saída para o Almoço**, **Retorno do Almoço** e **Saída
+Final** —, de forma totalmente independente:
 
-Deseja utilizar tolerância para entrada?
+Deseja utilizar tolerância para [ponto]?
 
 ○ Sim
 
@@ -420,29 +422,13 @@ Exemplo.
 
 5 minutos.
 
-Essa tolerância será aplicada automaticamente durante os cálculos.
+Cada tolerância é opcional e configurável separadamente — ativar uma
+não exige ativar as demais. Todas as quatro serão aplicadas
+automaticamente durante os cálculos (Capítulo 8).
 
 ---
 
-## 4.8 Tolerância do Almoço
-
-O sistema perguntará.
-
-Deseja utilizar tolerância para retorno do almoço?
-
-○ Sim
-
-○ Não
-
-Caso Sim.
-
-Informar quantidade de minutos.
-
-Essa tolerância será aplicada automaticamente.
-
----
-
-## 4.9 Finalização
+## 4.8 Finalização
 
 Após concluir todas as etapas.
 
@@ -1246,17 +1232,45 @@ tolerância de 5 minutos gera 10 minutos de atraso (06:40 − 06:30), não
 
 ---
 
-## 8.2 Almoço
+## 8.2 Saída para o Almoço
 
-A tolerância do almoço deverá funcionar exatamente da mesma maneira
-(Capítulo 8.1), aplicada ao horário de retorno do intervalo — faixa de
-aceitação em torno do horário previsto, e contagem integral a partir
-do previsto quando fora da faixa. Só se aplica em dias cuja jornada
-tenha intervalo definido (Capítulo 4.6).
+A tolerância de saída para o almoço deverá funcionar exatamente da
+mesma maneira (Capítulo 8.1), aplicada ao horário de saída para o
+intervalo — faixa de aceitação em torno do horário previsto, e
+contagem integral a partir do previsto quando fora da faixa. Só se
+aplica em dias cuja jornada tenha intervalo definido (Capítulo 4.6).
+
+Independente e configurável separadamente da tolerância de Entrada —
+uma pode estar ativa sem a outra.
 
 ---
 
-## 8.3 Sem Tolerância
+## 8.3 Retorno do Almoço
+
+A tolerância de retorno do almoço deverá funcionar exatamente da mesma
+maneira (Capítulo 8.1), aplicada ao horário de retorno do intervalo —
+faixa de aceitação em torno do horário previsto, e contagem integral a
+partir do previsto quando fora da faixa. Só se aplica em dias cuja
+jornada tenha intervalo definido (Capítulo 4.6).
+
+Independente e configurável separadamente das demais.
+
+---
+
+## 8.4 Saída Final
+
+A tolerância de saída final deverá funcionar exatamente da mesma
+maneira (Capítulo 8.1), aplicada ao horário de saída do dia — faixa de
+aceitação em torno do horário previsto, e contagem integral a partir
+do previsto quando fora da faixa. Aplica-se tanto a dias com intervalo
+(a última das 4 batidas) quanto a dias sem intervalo (a última das 2
+batidas).
+
+Independente e configurável separadamente das demais.
+
+---
+
+## 8.5 Sem Tolerância
 
 Caso a empresa não utilize tolerância.
 

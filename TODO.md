@@ -235,6 +235,21 @@ Homologado na Sprint 4.1 contra a planilha real da Qualimix.
 
 ---
 
+# ETAPA 13 - VERSÃO 1.1 (TOLERÂNCIAS COMPLETAS)
+
+| Status | Item |
+|--------|------|
+| 🟢 | Tolerância de Saída para o Almoço |
+| 🟢 | Tolerância de Saída Final |
+| 🟢 | Refatoração da engine (`_pontos_tolerancia`, estrutura escalável) |
+| 🟢 | Retrocompatibilidade com `configuracoes.json` da v1.0 |
+| 🟢 | Testes unitários (6 horários por ponto, incluindo borda) |
+| 🟢 | Homologação com planilha real (comparação manual planilha × relatório) |
+| 🟢 | Regressão (tolerâncias desativadas = comportamento idêntico à v1.0) |
+| 🟢 | Executável e instalador v1.1 (`QualiPonto_Setup_v1.1.exe`) |
+
+---
+
 # OBSERVAÇÕES
 
 - A planilha oficial do relógio de ponto nunca será alterada.

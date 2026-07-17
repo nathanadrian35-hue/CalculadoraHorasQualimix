@@ -1,6 +1,6 @@
 ; QualiPonto_Setup.iss
 ; ---------------------
-; Script do Inno Setup para o instalador oficial do QualiPonto v1.0.
+; Script do Inno Setup para o instalador oficial do QualiPonto.
 ;
 ; Empacota o executável já gerado pelo PyInstaller (dist\QualiPonto\,
 ; --onedir — Python/CustomTkinter/Pandas/OpenPyXL/xlrd/Pillow já
@@ -11,10 +11,15 @@
 ; Programas" (que exige admin para gravar) quebraria essa persistência
 ; para um usuário comum.
 ;
-; Gera um único arquivo: QualiPonto_Setup_v1.0.exe
+; O AppId é fixo entre versões de propósito (nunca mudar) — é o que
+; permite ao Inno Setup reconhecer uma instalação anterior e fazer
+; upgrade no lugar, em vez de criar uma segunda entrada em "Programas
+; Instalados". Só AppVersion/OutputBaseFilename mudam a cada versão.
+;
+; Gera um único arquivo: QualiPonto_Setup_v1.1.exe
 
 #define AppName "QualiPonto"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define AppPublisher "Nathan Adrian"
 #define AppExeName "QualiPonto.exe"
 
@@ -30,7 +35,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=commandline
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=installer_output
-OutputBaseFilename=QualiPonto_Setup_v1.0
+OutputBaseFilename=QualiPonto_Setup_v1.1
 SetupIconFile=assets\icones\app.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2

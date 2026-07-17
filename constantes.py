@@ -19,7 +19,7 @@ from enum import Enum
 
 APP_NOME: str = "QualiPonto"
 APP_NOME_CURTO: str = "Sistema de Controle de Jornada e Horas Extras"
-VERSAO: str = "1.0.0"
+VERSAO: str = "1.1.0"
 DESENVOLVEDOR: str = "Nathan Adrian"
 
 

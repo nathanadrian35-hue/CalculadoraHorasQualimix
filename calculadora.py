@@ -141,7 +141,9 @@ def recalcular_dia(dia: DiaTrabalho, contexto: ContextoCalculo) -> None:
        Se já houver Justificativa, o cálculo segue mesmo com a
        quantidade incorreta de batidas — é a Justificativa quem decide
        o efeito sobre a Hora Negativa (Cap. 9.7), não a quantidade.
-    5. Aplica tolerâncias de entrada e retorno do almoço (Cap. 8).
+    5. Aplica as tolerâncias de Entrada, Saída para o Almoço, Retorno
+       do Almoço e Saída Final (Cap. 8) — cada uma independente,
+       configurável e opcional.
     6. Calcula Horas Trabalhadas (Cap. 10.1).
     7. Calcula Saldo (Cap. 10.4) e deriva Extras/Negativas (Cap.
        10.2/10.3), considerando a Justificativa já informada (Cap. 9.7).
@@ -168,17 +170,10 @@ def recalcular_dia(dia: DiaTrabalho, contexto: ContextoCalculo) -> None:
     if tipo_pendencia is not None:
         _registrar_pendencia(dia, contexto, tipo_pendencia)
 
-    tol_entrada_ativa, tol_entrada_min = _obter_tolerancia(contexto.config, "entrada")
-    tol_almoco_ativa, tol_almoco_min = _obter_tolerancia(contexto.config, "almoco")
-
     if horarios:
-        entrada_prevista = jornada.entrada if jornada else None
-        horarios[0] = _aplicar_tolerancia(
-            horarios[0], entrada_prevista, tol_entrada_min, tol_entrada_ativa)
-        if len(horarios) == 4:
-            retorno_previsto = jornada.fim_intervalo if jornada else None
-            horarios[2] = _aplicar_tolerancia(
-                horarios[2], retorno_previsto, tol_almoco_min, tol_almoco_ativa)
+        for indice, previsto, chave_tolerancia in _pontos_tolerancia(jornada, len(horarios)):
+            ativa, minutos = _obter_tolerancia(contexto.config, chave_tolerancia)
+            horarios[indice] = _aplicar_tolerancia(horarios[indice], previsto, minutos, ativa)
 
     trabalhadas_min = _calcular_horas_trabalhadas_min(horarios)
     prevista_min = (jornada.jornada_prevista_minutos() if jornada else None) or 0
@@ -329,13 +324,14 @@ def _aplicar_tolerancia(
     horario_real: time, horario_previsto: time | None, minutos: int, ativa: bool,
 ) -> time:
     """
-    Aplica a tolerância como faixa de aceitação (Cap. 8.1/8.2): dentro
-    da faixa, o horário é tratado exatamente como o previsto. Fora da
-    faixa (incluindo quando não há tolerância ativa/configurada, ou
-    quando não há horário previsto), o horário real é usado sem
-    alteração — a contagem integral a partir do previsto acontece
-    naturalmente na subtração de Horas Trabalhadas/Saldo, sem lógica
-    extra aqui.
+    Aplica a tolerância como faixa de aceitação (Cap. 8.1-8.4, um dos
+    quatro pontos — Entrada, Saída Almoço, Retorno Almoço ou Saída
+    Final, decididos por `_pontos_tolerancia()`): dentro da faixa, o
+    horário é tratado exatamente como o previsto. Fora da faixa
+    (incluindo quando não há tolerância ativa/configurada, ou quando
+    não há horário previsto), o horário real é usado sem alteração — a
+    contagem integral a partir do previsto acontece naturalmente na
+    subtração de Horas Trabalhadas/Saldo, sem lógica extra aqui.
     """
     if not ativa or horario_previsto is None:
         return horario_real
@@ -345,6 +341,44 @@ def _aplicar_tolerancia(
     if abs(minutos_real - minutos_previsto) <= minutos:
         return horario_previsto
     return horario_real
+
+
+def _pontos_tolerancia(
+    jornada: JornadaDia | None, quantidade_batidas: int,
+) -> list[tuple[int, time | None, str]]:
+    """
+    Decide quais pontos de tolerância (Cap. 8) se aplicam a este dia, e
+    a qual horário previsto/chave de configuração (`tolerancia_<chave>`)
+    cada um corresponde — Entrada, Saída para o Almoço, Retorno do
+    Almoço e Saída Final, todas independentes, configuráveis e
+    opcionais (Cap. 8.1-8.4). Estrutura escalável e sem repetição: cada
+    ponto vira uma entrada (índice na lista de horários, horário
+    previsto, chave de config), e `recalcular_dia()` aplica todos com
+    o mesmo laço, chamando sempre a mesma `_aplicar_tolerancia()`.
+
+    Entrada (índice 0) é tentada sempre que há pelo menos 1 batida —
+    preserva exatamente o comportamento de antes desta refatoração.
+    Saída para o Almoço/Retorno do Almoço (índices 1/2) só fazem
+    sentido num dia de 4 batidas (jornada com intervalo) — mesma
+    condição exata que o Retorno do Almoço já usava antes. Saída Final
+    é a última batida esperada: índice 3 num dia de 4 batidas, ou
+    índice 1 num dia de 2 batidas (jornada sem intervalo) — nunca as
+    duas ao mesmo tempo. Dias com uma quantidade de batidas diferente
+    de 2 ou 4 (só alcançam aqui quando já justificados, Cap. 9.7) não
+    ganham nenhum ponto além da Entrada — mesmo comportamento de antes.
+    """
+    pontos: list[tuple[int, time | None, str]] = [
+        (0, jornada.entrada if jornada else None, "entrada"),
+    ]
+
+    if quantidade_batidas == 4:
+        pontos.append((1, jornada.inicio_intervalo if jornada else None, "saida_almoco"))
+        pontos.append((2, jornada.fim_intervalo if jornada else None, "almoco"))
+        pontos.append((3, jornada.saida if jornada else None, "saida"))
+    elif quantidade_batidas == 2:
+        pontos.append((1, jornada.saida if jornada else None, "saida"))
+
+    return pontos
 
 
 # ---------------------------------------------------------------------------

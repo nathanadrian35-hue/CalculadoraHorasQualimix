@@ -139,7 +139,8 @@ Na primeira execução:
 - Nome da empresa
 - Logo
 - Turnos
-- Tolerâncias
+- Tolerâncias (Entrada, Saída para o Almoço, Retorno do Almoço, Saída Final — todas
+  independentes, configuráveis e opcionais)
 - Pasta do histórico
 
 As configurações ficam salvas e podem ser alteradas posteriormente pela tela de Configurações.
@@ -340,6 +341,17 @@ Fim
 # Objetivo da Versão 1.0
 
 Implementar um sistema totalmente funcional para automatizar o processamento diário da folha de ponto da Qualimix.
+
+---
+
+# Objetivo da Versão 1.1
+
+Completar as tolerâncias de jornada: além de Entrada e Retorno do Almoço (já existentes
+desde a v1.0), implementadas também as tolerâncias de **Saída para o Almoço** e **Saída
+Final** — todas independentes, configuráveis e opcionais, seguindo exatamente a mesma
+regra de faixa de aceitação (Capítulo 8 da especificação). Nenhuma regra de negócio
+anterior foi alterada; configurações antigas continuam funcionando normalmente (as duas
+novas tolerâncias entram desativadas por padrão). Ver `CHANGELOG.md` para detalhes.
 
 ---
 
