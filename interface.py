@@ -15,15 +15,29 @@ controlador é esta própria janela (App), que expõe:
 
 from __future__ import annotations
 
+from typing import Callable
+
 import customtkinter as ctk
 
-from config import Config
+from config import ICONES_DIR, Config
 from constantes import APP_NOME
 from logger import get_logger
+from modelos import (
+    Competencia,
+    Funcionario,
+    FuncionarioPlanilha,
+    SetorNovoEncontrado,
+    SugestaoImportacao,
+)
+from relatorio import existem_pendencias_abertas
+from tela_competencias import TelaCompetencias
 from tela_configuracoes import TelaConfiguracoes
 from tela_funcionarios import TelaFuncionarios
 from tela_historico import TelaHistorico
+from tela_pendencias import TelaPendencias
 from tela_principal import TelaPrincipal
+from tela_relatorios import TelaRelatorios
+from tela_setores import TelaSetores
 from tela_sobre import TelaSobre
 
 log = get_logger()
@@ -44,9 +58,17 @@ class App(ctk.CTk):
 
         self.config_app = config
 
+        # Competência mais recentemente aberta nesta sessão (importada
+        # agora ou retomada pela Tela Competências) — usada só como dica
+        # de pré-seleção pela Tela de Relatórios (Cap. 12.8), nunca como
+        # fonte de dados: a fonte é sempre `competencias.listar()`/
+        # `competencias.carregar_competencia()`.
+        self.competencia_atual: Competencia | None = None
+
         self.title(APP_NOME)
         self.geometry(f"{self.LARGURA}x{self.ALTURA}")
         self.minsize(900, 600)
+        self._definir_icone()
         self._centralizar()
 
         # Container único onde todas as telas são empilhadas
@@ -61,6 +83,10 @@ class App(ctk.CTk):
             ("principal", TelaPrincipal),
             ("configuracoes", TelaConfiguracoes),
             ("funcionarios", TelaFuncionarios),
+            ("setores", TelaSetores),
+            ("pendencias", TelaPendencias),
+            ("relatorios", TelaRelatorios),
+            ("competencias", TelaCompetencias),
             ("historico", TelaHistorico),
             ("sobre", TelaSobre),
         ):
@@ -68,7 +94,10 @@ class App(ctk.CTk):
             tela.grid(row=0, column=0, sticky="nsew")
             self._telas[nome] = tela
 
-        self.mostrar_tela("principal")
+        # Primeira execução: abre o Wizard de configuração inicial (Cap. 4)
+        # em vez da tela principal. Nas próximas execuções, abre direto.
+        tela_inicial = "configuracoes" if config.primeira_execucao else "principal"
+        self.mostrar_tela(tela_inicial)
         log.info("Interface iniciada.")
 
     # -- Navegação -----------------------------------------------------------
@@ -92,7 +121,104 @@ class App(ctk.CTk):
         if principal is not None and hasattr(principal, "definir_status"):
             principal.definir_status(texto)
 
+    def iniciar_revisao_funcionarios(
+        self,
+        sugestoes: list[SugestaoImportacao],
+        funcionarios_planilha: list[FuncionarioPlanilha],
+        ao_concluir_calculo: Callable[[list[Funcionario]], None],
+    ) -> None:
+        """
+        Abre o Painel de Revisão (Cap. 5.4) na tela de Funcionários com as
+        sugestões de uma importação de planilha recém-processada.
+        `ao_concluir_calculo` é chamado ao final da revisão com os
+        funcionários já prontos para o Motor de Cálculo (Cap. 6).
+        """
+        tela_funcionarios = self._telas.get("funcionarios")
+        if tela_funcionarios is None:
+            log.error("Tela de funcionários não encontrada para iniciar a revisão.")
+            return
+        tela_funcionarios.iniciar_revisao_importacao(
+            sugestoes, funcionarios_planilha, ao_concluir_calculo)
+        self.mostrar_tela("funcionarios")
+
+    def iniciar_revisao_setores_novos(
+        self, setores_novos: list[SetorNovoEncontrado], ao_concluir: Callable[[], None],
+    ) -> None:
+        """
+        Abre a tela "Foram encontrados novos setores na planilha"
+        (Cap. 5.17) na tela de Funcionários, antes do Painel de Revisão.
+        """
+        tela_funcionarios = self._telas.get("funcionarios")
+        if tela_funcionarios is None:
+            log.error("Tela de funcionários não encontrada para revisar setores novos.")
+            return
+        tela_funcionarios.iniciar_revisao_setores_novos(setores_novos, ao_concluir)
+        self.mostrar_tela("funcionarios")
+
+    def iniciar_tela_pendencias(self, competencia: Competencia) -> None:
+        """
+        Ponto de entrada chamado logo após o Motor de Cálculo (Cap. 6)
+        processar o lote e a Competência já ter sido persistida
+        (`competencias.salvar_competencia`, em `tela_principal.py`).
+        Mesmo destino de `abrir_competencia()` abaixo.
+        """
+        self._abrir(competencia)
+
+    def abrir_competencia(self, competencia: Competencia) -> None:
+        """
+        Retoma o trabalho de uma competência já persistida (Tela
+        Competências, botão "Abrir" — "Retomar trabalho"): mesma decisão
+        de destino de `iniciar_tela_pendencias()`, reaproveitada aqui
+        para os dois pontos de entrada nunca divergirem.
+        """
+        self._abrir(competencia)
+
+    def _abrir(self, competencia: Competencia) -> None:
+        """
+        Decide o destino de uma Competência — Pendências ou Relatórios —
+        e a guarda como `competencia_atual` (dica de pré-seleção da Tela
+        de Relatórios).
+
+        Fluxo inteligente (melhoria da v1.0): se não houver nenhuma
+        pendência em aberto, a Tela de Pendências é desnecessária — vai
+        direto para a Tela de Relatórios. Reaproveita
+        `relatorio.existem_pendencias_abertas`, a mesma checagem que já
+        bloqueia a geração do relatório (Cap. 9.1/11.11), sem duplicar
+        a regra.
+        """
+        self.competencia_atual = competencia
+
+        if not existem_pendencias_abertas(competencia.resultado):
+            self.definir_status("Sem pendências em aberto.")
+            tela_relatorios = self._telas.get("relatorios")
+            if tela_relatorios is not None:
+                tela_relatorios.selecionar_competencia(competencia)
+            self.mostrar_tela("relatorios")
+            return
+
+        tela_pendencias = self._telas.get("pendencias")
+        if tela_pendencias is None:
+            log.error("Tela de pendências não encontrada.")
+            return
+        tela_pendencias.iniciar(competencia)
+        self.mostrar_tela("pendencias")
+
     # -- Utilidades ----------------------------------------------------------
+
+    def _definir_icone(self) -> None:
+        """
+        Ícone da janela/taskbar (Cap. 17: empacotamento), a partir de
+        assets/icones/app.ico — silenciosamente ignorado se ausente
+        (mesmo espírito tolerante do carregamento da logo, Cap. 4.3),
+        nunca impede a janela de abrir.
+        """
+        caminho_icone = ICONES_DIR / "app.ico"
+        if not caminho_icone.exists():
+            return
+        try:
+            self.iconbitmap(str(caminho_icone))
+        except Exception as erro:  # pragma: no cover - proteção contra ambiente sem suporte a .ico
+            log.error("Falha ao aplicar o ícone da janela: %s", erro)
 
     def _centralizar(self) -> None:
         """Centraliza a janela na tela."""

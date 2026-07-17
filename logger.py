@@ -16,10 +16,18 @@ Uso:
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
-# Diretório base do projeto (pasta onde este arquivo está)
-BASE_DIR: Path = Path(__file__).resolve().parent
+# Diretório base do projeto (pasta onde este arquivo está). Em um
+# executável empacotado (PyInstaller), __file__ apontaria para a pasta
+# temporária de extração — descartada a cada execução — em vez da pasta
+# real do .exe; mesma lógica de config.py, duplicada aqui de propósito
+# para este módulo continuar dependência-livre.
+BASE_DIR: Path = (
+    Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent
+)
 LOGS_DIR: Path = BASE_DIR / "Logs"
 ARQUIVO_LOG: Path = LOGS_DIR / "processamento.log"
 

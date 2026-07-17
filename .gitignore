@@ -21,8 +21,9 @@ backup/
 build/
 dist/
 *.spec
+installer_output/
 
-# Dados gerados pela aplica‡Æo
+# Dados gerados pela aplicaï¿½ï¿½o
 dados/
 backup/
 Historico/

@@ -1,0 +1,56 @@
+; QualiPonto_Setup.iss
+; ---------------------
+; Script do Inno Setup para o instalador oficial do QualiPonto v1.0.
+;
+; Empacota o executável já gerado pelo PyInstaller (dist\QualiPonto\,
+; --onedir — Python/CustomTkinter/Pandas/OpenPyXL/xlrd/Pillow já
+; embutidos, sem exigir instalação manual). Instalação por usuário
+; (sem exigir administrador/UAC), porque o QualiPonto lê/grava seus
+; dados (dados\, Historico\, Logs\, backup\, assets\) sempre ao lado
+; do próprio executável (Cap. 13.1) — instalar em "Arquivos de
+; Programas" (que exige admin para gravar) quebraria essa persistência
+; para um usuário comum.
+;
+; Gera um único arquivo: QualiPonto_Setup_v1.0.exe
+
+#define AppName "QualiPonto"
+#define AppVersion "1.0.0"
+#define AppPublisher "Nathan Adrian"
+#define AppExeName "QualiPonto.exe"
+
+[Setup]
+AppId={{5A18CD71-7B33-4679-8B51-13F04018D5FF}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppPublisher={#AppPublisher}
+DefaultDirName={autopf}\{#AppName}
+DefaultGroupName={#AppName}
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=commandline
+ArchitecturesInstallIn64BitMode=x64compatible
+OutputDir=installer_output
+OutputBaseFilename=QualiPonto_Setup_v1.0
+SetupIconFile=assets\icones\app.ico
+UninstallDisplayIcon={app}\{#AppExeName}
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+DisableWelcomePage=no
+
+[Languages]
+Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "Criar um atalho na Área de Trabalho"; GroupDescription: "Atalhos adicionais:"
+
+[Files]
+Source: "dist\QualiPonto\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+Name: "{group}\Desinstalar {#AppName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\{#AppExeName}"; Description: "Abrir o {#AppName} agora"; Flags: nowait postinstall skipifsilent

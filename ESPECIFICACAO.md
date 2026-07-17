@@ -1,5 +1,5 @@
 ESPECIFICAÇÃO OFICIAL
-Calculadora de Horas Extras Qualimix
+QualiPonto — Sistema de Controle de Jornada e Horas Extras
 Versão 2.0
 
 Autor: Nathan Adrian
@@ -8,7 +8,7 @@ CAPÍTULO 1
 VISÃO GERAL DO SISTEMA
 1.1 Objetivo
 
-A Calculadora de Horas Extras Qualimix é um sistema desktop desenvolvido para automatizar completamente o processamento das folhas de ponto dos colaboradores da empresa.
+O QualiPonto é um sistema desktop desenvolvido para automatizar completamente o processamento das folhas de ponto dos colaboradores da empresa.
 
 O sistema deverá eliminar o trabalho manual atualmente realizado pelo setor responsável, reduzindo erros, aumentando a velocidade do processamento e padronizando a geração dos relatórios.
 
@@ -261,15 +261,13 @@ Esperado:
 
 4 batidas.
 
-Sábado:
+Sábado e Domingo:
 
-Esperado:
-
-2 batidas.
-
-Domingo:
-
-Todo horário registrado será considerado hora extra.
+Não existe mais uma regra fixa de quantidade de batidas ou de hora
+extra automática para estes dias. O que é esperado em cada um depende
+exclusivamente da jornada configurada no Turno do funcionário
+(Capítulo 4.6) — ver o detalhamento completo nos Capítulos 6.4
+(Sábado), 6.5 (Domingo) e 7.3 (Duas Batidas).
 
 Fim da Parte 1
 # CAPÍTULO 4
@@ -358,29 +356,49 @@ Nenhum cadastro será digitado manualmente.
 
 ## 4.6 Definição dos Turnos
 
-Após identificar todos os funcionários.
+Cada Turno cadastrado deverá ter jornada independente para três tipos
+de dia: Segunda a Sexta, Sábado e Domingo — para que o motor de
+cálculo (Capítulo 6) saiba exatamente o que é esperado em cada um,
+sem depender de uma regra fixa igual para todos os turnos.
 
-O sistema exibirá uma lista.
+**Segunda a Sexta** — sempre obrigatória. Campos:
 
-Exemplo.
+Entrada
 
-João Silva
+Saída
 
-○ Turno 06:00 às 15:00
+Início do intervalo
 
-○ Turno 07:30 às 16:30
+Fim do intervalo
 
-Maria
+**Sábado** — opcional, controlado por um checkbox "Trabalha sábado":
 
-○ Turno 06:00 às 15:00
+Desmarcado: nenhum campo de horário é exibido nem validado — o turno
+simplesmente não prevê trabalho aos sábados.
 
-○ Turno 07:30 às 16:30
+Marcado: exibe Entrada, Saída e um checkbox "Possui intervalo".
+Entrada e Saída passam a ser obrigatórios. Se "Possui intervalo"
+estiver marcado, exibe também Início e Fim do intervalo (também
+obrigatórios); caso contrário, o sábado é tratado como um dia sem
+horário de almoço.
 
-O usuário apenas marcará o turno.
+**Domingo** — exatamente o mesmo comportamento do Sábado: checkbox
+"Trabalha domingo", Entrada, Saída, checkbox "Possui intervalo" e
+intervalo opcional.
 
-Depois clicar em:
+Em qualquer um dos três tipos de dia, a jornada prevista (Capítulo
+10.1) é calculada automaticamente a partir dos horários preenchidos,
+sempre que algum deles for alterado. Exemplo de exibição:
 
-Salvar.
+Segunda a Sexta — Jornada: 8h00
+
+Sábado — Jornada: 5h30
+
+Domingo — Não trabalha
+
+Ao selecionar um Turno na lista de funcionários (importação ou
+cadastro manual, Capítulo 5), o vínculo continua sendo feito apenas
+pelo Turno como um todo — nunca pelo dia da semana isoladamente.
 
 ---
 
@@ -442,77 +460,303 @@ Ela não deverá ser exibida novamente.
 
 # CAPÍTULO 5
 
-# CADASTRO INTELIGENTE
+# CADASTRO INTELIGENTE ASSISTIDO DE FUNCIONÁRIOS
 
 ## 5.1 Objetivo
 
-Eliminar completamente o cadastro manual de funcionários.
+A principal forma de cadastrar funcionários é a importação da planilha
+do ponto eletrônico. O sistema deverá identificar automaticamente os
+funcionários encontrados, criar o cadastro básico de cada um, detectar
+o horário de entrada predominante e sugerir automaticamente o turno
+mais compatível.
 
-Toda manutenção deverá ocorrer automaticamente através da leitura das planilhas.
+O cadastro manual continua existindo, como complemento — nunca como
+substituto da importação. É utilizado para:
+
+Cadastrar funcionários antes da primeira importação.
+
+Adicionar funcionários que ainda não aparecem na planilha.
+
+Corrigir qualquer informação.
+
+Cadastrar funcionários temporários.
+
+Nesta fase (Sprint 3), a leitura definitiva de arquivos XLS/XLSX ainda
+não é implementada (Sprint 3.5). Todo o mecanismo de identificação
+automática, sugestão de turno e painel de revisão deverá ser construído
+e testado com dados simulados, de forma que a leitura real da planilha
+apenas alimente esse mecanismo já pronto, sem necessidade de
+refatoração.
 
 ---
 
 ## 5.2 Primeira Importação
 
-Na primeira planilha.
+Quando o usuário importar a primeira planilha (Sprint 3.5), o sistema
+deverá, para cada funcionário encontrado:
 
-O sistema deverá:
+1. Identificar automaticamente o funcionário.
 
-Ler todos os funcionários.
+2. Criar automaticamente o cadastro básico (Nome utilizado na Planilha
+   e, inicialmente, Nome Completo igual a ele).
 
-Cadastrar automaticamente.
+3. Detectar o horário de entrada predominante do funcionário.
 
-Solicitar apenas o turno.
+4. Comparar esse horário com todos os Turnos cadastrados (Capítulo
+   4.6).
 
-Salvar o cadastro.
+5. Sugerir automaticamente o turno mais compatível.
 
----
+6. Marcar essa sugestão como:
 
-## 5.3 Próximas Importações
+✓ Confirmado — quando a identificação for suficientemente confiável.
 
-Sempre que uma nova planilha for aberta.
+⚠ Revisar — quando houver dúvida (nenhum turno compatível o suficiente,
+ou mais de um turno igualmente compatível).
 
-O sistema comparará:
+7. Preencher automaticamente todas as informações possíveis.
 
-Funcionários cadastrados.
-
-↓
-
-Funcionários encontrados.
-
----
-
-## 5.4 Novo Funcionário
-
-Caso um funcionário novo seja encontrado.
-
-O sistema deverá exibir.
-
-------------------------------------------------
-
-Novo funcionário encontrado.
-
-Nome:
-
-Carlos Eduardo
-
-Selecione o turno.
-
-○ 06:00 às 15:00
-
-○ 07:30 às 16:30
-
-[ Salvar ]
-
-------------------------------------------------
-
-Após salvar.
-
-O funcionário será incluído automaticamente no cadastro.
+8. Deixar pendente apenas o que realmente precisa de decisão do
+   usuário — no mínimo, Cargo e Setor, que não podem ser inferidos
+   automaticamente.
 
 ---
 
-## 5.5 Funcionário sem Horários
+## 5.3 Cadastro Assistido
+
+Após a importação, o usuário apenas complementa:
+
+Cargo.
+
+Setor.
+
+Demais informações administrativas (Apelido, Matrícula, CPF), quando
+aplicável.
+
+Todo o restante deverá já estar preenchido automaticamente sempre que
+possível.
+
+---
+
+## 5.4 Painel de Revisão
+
+Antes da conclusão da importação, o sistema deverá exibir um painel de
+revisão com uma linha por funcionário identificado:
+
+Funcionário — Horário encontrado — Turno sugerido — Situação — Status
+
+Exemplo:
+
+João — 07:29 — Produção — ✓ Confirmado — ☑ Ativo
+
+Maria — 07:31 — Produção — ✓ Confirmado — ☑ Ativo
+
+Carlos — 08:42 — Nenhum — ⚠ Revisar — ☑ Ativo
+
+Pedro — 06:02 — Motoristas — ✓ Confirmado — ☐ Inativo
+
+Somente os casos marcados como "⚠ Revisar" deverão exigir intervenção
+do usuário antes de concluir a importação. Os casos "✓ Confirmado"
+prosseguem automaticamente.
+
+**Status (Ativo/Inativo)**: cada linha traz um checkbox de Status,
+marcado como Ativo por padrão. Se o funcionário já existir no cadastro
+como Inativo, a linha chega desmarcada (Inativo), refletindo o estado
+atual — sem reativação automática (isso permanece uma decisão
+manual). Ao concluir a importação (Capítulo 5.7):
+
+Funcionários marcados como Ativo — cadastrados normalmente, enviados
+ao Motor de Cálculo (Capítulo 6), podem gerar Pendências (Capítulo 9)
+e aparecem nos Relatórios (Capítulo 11) desta competência.
+
+Funcionários marcados como Inativo — cadastrados/atualizados
+normalmente (permanecem no cadastro, com status = Inativo), mas NÃO
+são enviados ao Motor de Cálculo, NÃO geram Pendências e NÃO aparecem
+nos Relatórios desta competência.
+
+---
+
+## 5.5 Reconhecimento Automático de Turno
+
+A planilha contém o horário de entrada de cada funcionário. O sistema
+deverá comparar esse horário com o horário de entrada de cada Turno
+cadastrado e sugerir automaticamente aquele cuja entrada estiver mais
+próxima.
+
+Exemplo:
+
+Turno A tem entrada às 07:30.
+
+Funcionário registrou entrada às 07:29.
+
+Sugestão automática: Turno A (✓ Confirmado).
+
+Caso o horário encontrado não esteja suficientemente próximo de nenhum
+turno cadastrado, ou esteja igualmente próximo de mais de um, a
+sugestão deverá ser marcada como "⚠ Revisar", sem turno pré-selecionado
+automaticamente.
+
+---
+
+## 5.6 Importações Futuras
+
+Em importações seguintes (após a primeira), o sistema deverá:
+
+Reconhecer automaticamente os funcionários já cadastrados (Capítulo
+5.8).
+
+Reconhecer alterações no horário de entrada (podendo sugerir revisão
+do turno, caso o padrão tenha mudado).
+
+Identificar novos funcionários (ainda não cadastrados).
+
+Identificar possíveis conflitos (ex.: nome da planilha correspondendo
+a mais de um cadastro).
+
+Nunca duplicar um funcionário já existente.
+
+Respeitar em todos os casos a regra de Importação Parcial (Capítulo
+5.7).
+
+---
+
+## 5.7 Importação Parcial
+
+O sistema nunca deverá assumir que uma planilha importada contém todos
+os funcionários da empresa.
+
+Uma importação poderá representar:
+
+Toda a empresa.
+
+Apenas um setor.
+
+Apenas um período.
+
+Apenas alguns funcionários.
+
+Portanto, em toda importação (primeira ou seguintes):
+
+Funcionários que não aparecerem na planilha importada NÃO deverão ser
+excluídos.
+
+Funcionários que não aparecerem NÃO deverão ser inativados
+automaticamente.
+
+Funcionários que não aparecerem NÃO deverão perder seus vínculos com
+Turnos ou Setores.
+
+O sistema deverá atualizar apenas os funcionários encontrados na
+importação.
+
+Novos funcionários encontrados deverão ser adicionados normalmente
+(Capítulo 5.2).
+
+Alterações deverão ser aplicadas apenas aos funcionários presentes na
+planilha importada.
+
+Exemplo:
+
+Cadastro atual: 150 funcionários.
+
+Importação realizada: 30 funcionários.
+
+Resultado esperado:
+
+Atualizar os 30 encontrados.
+
+Adicionar novos funcionários, caso existam.
+
+Manter os outros 120 exatamente como estão.
+
+Nunca interpretar ausência na planilha como desligamento.
+
+Esta regra prevalece sobre qualquer outra leitura possível dos
+Capítulos 5.2, 5.6 e 5.11 — a ausência de um funcionário numa
+importação nunca é, por si só, motivo para alterar seu cadastro.
+
+---
+
+## 5.8 Localização Automática na Leitura da Planilha
+
+Identificador principal: o **IDUsuário** lido de cada bloco da planilha
+(Capítulo 3.3) — não o nome. Para localizar o funcionário correspondente
+a uma linha da planilha, o sistema deverá utilizar, nesta ordem:
+
+1. O IDUsuário, comparado com o campo "IDUsuário" salvo em cada
+   funcionário cadastrado (Capítulo 5.14). Casamento exato — nunca
+   casa dois IDUsuário vazios entre si.
+
+2. Caso o cadastro correspondente ainda não tenha um IDUsuário salvo
+   (cadastro anterior a esta funcionalidade, ou criado manualmente),
+   cai para o casamento por nome de sempre: "Nome utilizado na
+   Planilha", se preenchido, senão o "Nome Completo". Esse casamento
+   por nome funciona como **migração automática**: assim que encontra
+   o cadastro por nome, o sistema grava o IDUsuário daquela linha no
+   cadastro — nas importações seguintes, esse funcionário já passa a
+   ser localizado diretamente pelo IDUsuário, sem depender do nome
+   novamente. Não existe tela ou rotina separada de migração; ela
+   acontece sozinha, na primeira importação em que o funcionário
+   reaparecer.
+
+Se nenhum funcionário cadastrado corresponder (nem por IDUsuário, nem
+por nome), ele deverá ser tratado como um novo funcionário (Capítulo
+5.2), nunca como uma pendência silenciosa.
+
+Isso é o que permite diferenciar corretamente dois funcionários reais
+com exatamente o mesmo nome (homônimos): tendo IDUsuário diferente na
+planilha, eles chegam ao Painel de Revisão (Capítulo 5.4) como duas
+linhas distintas — cada uma mostrando o próprio IDUsuário como
+subtítulo, para o usuário conseguir diferenciá-las visualmente — e
+geram dois cadastros separados, cada um com seus próprios dias e
+batidas, nunca misturados entre si.
+
+---
+
+## 5.9 Cadastro Manual
+
+O cadastro manual continua disponível a qualquer momento, como
+complemento à importação (Capítulo 5.1). Pela Tela de Funcionários, o
+usuário poderá:
+
+Adicionar funcionário.
+
+Editar funcionário.
+
+Excluir funcionário.
+
+Ativar/Inativar funcionário.
+
+Cadastrar funcionários antes da primeira importação.
+
+Cadastrar funcionários temporários (que nunca aparecerão na planilha).
+
+Corrigir qualquer informação, a qualquer momento.
+
+---
+
+## 5.10 Ações em Massa
+
+A Tela de Funcionários deverá permitir selecionar múltiplos
+funcionários (ou todos) simultaneamente, e aplicar em lote:
+
+Alterar Turno.
+
+Alterar Setor.
+
+Alterar Cargo.
+
+Ativar.
+
+Inativar.
+
+Ações em massa são sempre um comando explícito do usuário sobre os
+funcionários selecionados — nunca um efeito colateral de uma
+importação (Capítulo 5.7).
+
+---
+
+## 5.11 Funcionário sem Horários
 
 Caso um funcionário apareça na planilha sem nenhuma batida.
 
@@ -558,57 +802,66 @@ Essa informação deverá ser gravada no relatório.
 
 ---
 
-## 5.6 Funcionário Não Encontrado
+## 5.12 Funcionário Não Encontrado na Planilha
 
-Caso um funcionário cadastrado deixe de aparecer na planilha.
+Caso um funcionário cadastrado deixe de aparecer na planilha importada.
 
-Nenhuma alteração deverá ser realizada automaticamente.
+Nenhuma alteração deverá ser realizada automaticamente — nem exclusão,
+nem inativação, nem perda de vínculo com Turno ou Setor (Capítulo 5.7,
+Importação Parcial).
 
-O cadastro permanecerá ativo.
+O cadastro permanecerá exatamente como estava.
 
 O sistema apenas registrará essa ocorrência nos logs.
 
 ---
 
-## 5.7 Alteração de Turno
+## 5.13 Alteração de Turno ou Setor
 
-A qualquer momento.
+A qualquer momento, pela Tela de Funcionários, o usuário poderá alterar
+o Turno e/ou o Setor de um funcionário, sempre por seleção em lista —
+nunca por texto digitado. O mesmo vale para alterações em massa
+(Capítulo 5.10).
 
-O usuário poderá abrir.
-
-Funcionários.
-
-↓
-
-Selecionar funcionário.
-
-↓
-
-Alterar turno.
-
-↓
-
-Salvar.
-
-Nenhum código deverá ser alterado.
+O vínculo é sempre por ID. Alterar o nome de um Turno ou de um Setor
+nunca quebra o vínculo já existente com os funcionários (Capítulo 21.4).
 
 ---
 
-## 5.8 Estrutura do Cadastro
+## 5.14 Estrutura do Cadastro
 
-Cada funcionário possuirá.
+Cada funcionário possuirá:
 
-ID.
+ID (UUID gerado automaticamente, nunca editável).
 
-Nome.
+Nome Completo (obrigatório).
 
-Turno.
+Nome utilizado na Planilha (opcional — se vazio, a localização
+automática do Capítulo 5.8 utilizará o Nome Completo).
 
-Status.
+IDUsuário (identificador principal da planilha, Capítulo 5.8 — vazio
+em cadastros anteriores a esta funcionalidade, até a migração
+automática na próxima importação em que o funcionário reaparecer).
+
+Apelido (opcional).
+
+Matrícula (opcional).
+
+CPF (opcional).
+
+Cargo (obrigatório).
+
+Turno (vínculo obrigatório por ID — Capítulo 4.6).
+
+Setor (vínculo obrigatório por ID — Capítulo 21).
+
+Status (Ativo/Inativo).
 
 Data de Cadastro.
 
 Última Atualização.
+
+Não é permitido cadastrar dois funcionários com o mesmo Nome Completo.
 
 Tudo armazenado em:
 
@@ -616,19 +869,141 @@ dados/funcionarios.json
 
 ---
 
-## 5.9 Atualização Automática
+## 5.15 Atualização Automática
 
-Sempre que uma nova planilha for processada.
+Sempre que o sistema criar (via importação) ou o usuário adicionar ou
+editar um funcionário.
 
-O sistema deverá:
+O sistema deverá atualizar automaticamente a "Última Atualização".
 
-Atualizar automaticamente.
+Sem necessidade de nenhuma ação extra do usuário.
 
-Última competência processada.
+---
 
-Última data de processamento.
+## 5.16 Reconhecimento Automático de Setor
 
-Sem necessidade de intervenção do usuário.
+Além do horário de entrada (Capítulo 5.5), a planilha do ponto também
+traz o campo "Dep." (departamento) de cada funcionário.
+
+O sistema deverá comparar esse valor com o nome de cada Setor já
+cadastrado (Capítulo 21), de forma tolerante a diferenças de
+maiúsculas/minúsculas, acentuação e espaços extras no início, no fim
+ou entre palavras.
+
+Exemplos considerados equivalentes:
+
+"PRODUCAO" = "Produção"
+
+" logistica " = "Logística"
+
+"RH" = "rh"
+
+Regras de sugestão:
+
+Exatamente um Setor cadastrado corresponde ao "Dep." encontrado ->
+sugestão automática desse Setor (✓ Confirmado).
+
+Mais de um Setor cadastrado corresponde de forma equivalente
+(ambiguidade) -> ⚠ Revisar, sem impedir o usuário de escolher
+manualmente.
+
+Nenhum Setor cadastrado corresponde -> ⚠ Revisar, sem Setor
+pré-selecionado (ver também Capítulo 5.17).
+
+O Painel de Revisão (Capítulo 5.4) deverá permitir corrigir
+manualmente o Setor sugerido, da mesma forma que já permite corrigir
+o Turno.
+
+---
+
+## 5.17 Criação Automática de Setores Não Cadastrados
+
+Os Setores deixam de ser um pré-requisito obrigatório para a
+importação. O sistema não deverá exigir que todos os Setores
+existentes na planilha já estejam cadastrados antes de importar.
+
+Durante o processamento de uma planilha, o sistema deverá:
+
+1. Ler todos os valores distintos do campo "Dep." encontrados na
+planilha.
+
+2. Comparar cada um com os Setores já cadastrados, usando a mesma
+comparação tolerante do Capítulo 5.16.
+
+3. Identificar quais desses valores não correspondem a nenhum Setor
+já cadastrado ("Setores novos").
+
+Caso existam Setores novos, antes de exibir o Painel de Revisão
+(Capítulo 5.4), o sistema deverá exibir uma tela informando:
+
+"Foram encontrados novos setores na planilha."
+
+Com uma lista de checkboxes, uma linha por Setor novo, todos
+pré-marcados, mostrando também quantos funcionários da planilha
+pertencem a cada um (para o usuário confirmar rapidamente se o
+reconhecimento está correto). Exemplo:
+
+☑ Produção (26 funcionários)
+
+☑ Logística (8 funcionários)
+
+☑ RH (4 funcionários)
+
+☑ Motoristas (2 funcionários)
+
+E dois botões:
+
+[ Criar selecionados ] — cria automaticamente cada Setor novo que
+permanecer marcado.
+
+[ Ignorar ] — não cria nenhum Setor novo nesta importação; os "Dep."
+correspondentes permanecem sem Setor cadastrado (⚠ Revisar).
+
+Cada Setor criado por esta tela deverá seguir exatamente a estrutura
+do Capítulo 21.2:
+
+ID gerado automaticamente.
+
+Nome = o valor do "Dep." encontrado na planilha, com a grafia
+normalizada para uma apresentação amigável — nunca gravado tal como
+foi digitado na planilha quando isso resultar em texto todo em
+maiúsculas, todo em minúsculas ou sem acentuação. Exemplos:
+
+"PRODUCAO" ou "producao" -> "Produção"
+
+"LOGISTICA" ou "logistica" -> "Logística"
+
+"MOTORISTAS" -> "Motoristas"
+
+"RH" -> "RH" (siglas permanecem em maiúsculas)
+
+O matching tolerante (Capítulo 5.16) continua funcionando normalmente
+sobre o valor original lido da planilha — apenas a apresentação do
+Setor salvo no cadastro é normalizada.
+
+Cor = vazia (o usuário poderá definir depois, pela Tela de
+Gerenciamento de Setores, Capítulo 21.3).
+
+Status = Ativo.
+
+Os Setores criados deverão ser persistidos imediatamente em
+dados/setores.json (Capítulo 21.6), usando o mesmo mecanismo de
+leitura/escrita/backup já existente — nenhum novo mecanismo de
+persistência deverá ser criado.
+
+Após criar os Setores selecionados (ou após "Ignorar"), a importação
+deverá continuar automaticamente, sem exigir nenhuma ação adicional
+do usuário.
+
+A sugestão automática de Setor (Capítulo 5.16) desta mesma importação
+deverá considerar também os Setores recém-criados — um "Dep." que
+corresponda a um Setor recém-criado deverá aparecer no Painel de
+Revisão já como ✓ Confirmado, sem exigir uma segunda importação.
+
+Esta tela é exclusiva do fluxo de importação. A administração
+completa de Setores (renomear, alterar cor, ativar/inativar, excluir)
+continua sendo feita apenas pela Tela de Gerenciamento de Setores
+(Capítulo 21.3).
 # CAPÍTULO 6
 
 # MOTOR DE CÁLCULO
@@ -725,33 +1100,51 @@ O cálculo deverá ocorrer normalmente.
 
 ## 6.4 Sábado
 
-O sistema deverá identificar automaticamente os sábados.
+O sistema deverá identificar automaticamente os sábados pelo dia da
+semana — isso nunca é configurado manualmente.
 
-Não será permitido configurar isso manualmente.
+A jornada esperada do sábado passa a vir do Turno vinculado ao
+funcionário (Capítulo 4.6), não mais de uma regra fixa igual para
+todos:
 
-Para sábados.
+Se o Turno do funcionário tiver jornada de Sábado configurada
+(checkbox "Trabalha sábado" marcado): a jornada esperada é definida
+pela Entrada/Saída (e, se houver, o Intervalo) daquele Turno —
+inclusive a existência ou não de horário de almoço deixa de ser uma
+regra fixa do sistema e passa a depender do checkbox "Possui
+intervalo" de cada Turno.
 
-Esperado:
+Se o Turno do funcionário não tiver jornada de Sábado configurada: o
+sábado é tratado como um dia sem jornada prevista.
 
-2 batidas.
-
-Entrada.
-
-↓
-
-Saída.
-
-Não existe horário de almoço.
+O algoritmo exato de cálculo (Capítulo 10) a partir dessa jornada será
+definido na implementação do Motor de Cálculo (Sprint 4) — este
+capítulo só estabelece de onde vem o esperado do dia.
 
 ---
 
 ## 6.5 Domingo
 
-O sistema deverá identificar automaticamente os domingos.
+O sistema deverá identificar automaticamente os domingos pelo dia da
+semana — isso nunca é configurado manualmente.
 
-Todo horário registrado no domingo deverá ser considerado Hora Extra.
+A jornada esperada do domingo passa a vir do Turno vinculado ao
+funcionário (Capítulo 4.6), da mesma forma que o Sábado (Capítulo
+6.4):
 
-Independentemente da quantidade de batidas.
+Se o Turno do funcionário tiver jornada de Domingo configurada
+(checkbox "Trabalha domingo" marcado): a jornada esperada é definida
+pela Entrada/Saída (e, se houver, o Intervalo) daquele Turno.
+
+Se o Turno do funcionário não tiver jornada de Domingo configurada:
+todo horário registrado no domingo continua sendo considerado Hora
+Extra, independentemente da quantidade de batidas — a regra original
+deste capítulo permanece válida como comportamento padrão na ausência
+de jornada de Domingo configurada.
+
+O algoritmo exato de cálculo (Capítulo 10) para quando existe jornada
+de Domingo configurada será definido na implementação do Motor de
+Cálculo (Sprint 4).
 
 ---
 
@@ -793,9 +1186,12 @@ Segunda a sexta.
 
 Pendência.
 
-Sábado.
+Sábado e Domingo.
 
-Situação normal.
+Depende da jornada configurada no Turno do funcionário para aquele
+dia (Capítulo 4.6/6.4/6.5): o critério exato de quando 2 batidas são
+situação normal ou pendência para Sábado/Domingo será definido junto
+com o Motor de Cálculo (Sprint 4).
 
 ---
 
@@ -827,33 +1223,36 @@ O usuário decidirá como proceder.
 
 ## 8.1 Entrada
 
-Caso exista tolerância configurada.
+Caso exista tolerância configurada, ela deverá ser aplicada
+automaticamente como uma **faixa de aceitação** em torno do horário
+previsto — tanto para atraso quanto para antecipação.
 
-Ela deverá ser aplicada automaticamente.
+Exemplo:
 
-Exemplo.
+Entrada prevista: 06:30
 
-Entrada prevista.
+Tolerância: 5 minutos
 
-07:30
+Qualquer entrada registrada entre 06:25 e 06:35 (inclusive) deverá ser
+considerada exatamente como 06:30 para efeito de cálculo — não apenas
+"sem atraso", mas tratada como se tivesse batido exatamente no horário
+previsto.
 
-Entrada registrada.
-
-07:34
-
-Tolerância.
-
-5 minutos.
-
-Resultado.
-
-Sem atraso.
+Fora da faixa de aceitação (ex.: 06:36, ou 06:24), o horário conta
+**integralmente a partir do horário previsto** — nunca apenas o
+excedente além da tolerância. Ou seja, uma entrada às 06:40 com
+tolerância de 5 minutos gera 10 minutos de atraso (06:40 − 06:30), não
+5 minutos (06:40 − 06:35).
 
 ---
 
 ## 8.2 Almoço
 
-A tolerância do almoço deverá funcionar da mesma maneira.
+A tolerância do almoço deverá funcionar exatamente da mesma maneira
+(Capítulo 8.1), aplicada ao horário de retorno do intervalo — faixa de
+aceitação em torno do horário previsto, e contagem integral a partir
+do previsto quando fora da faixa. Só se aplica em dias cuja jornada
+tenha intervalo definido (Capítulo 4.6).
 
 ---
 
@@ -891,6 +1290,12 @@ Mais de quatro batidas.
 
 Horário inconsistente.
 
+Turno não definido — funcionário sem Turno vinculado (ou vinculado a
+um Turno que não existe mais). Enquanto essa pendência não for
+resolvida (Capítulo 5.13: sempre pela seleção de um Turno válido), o
+Motor de Cálculo (Capítulo 6) não terá jornada prevista para calcular
+nenhum dia desse funcionário.
+
 ---
 
 ## 9.3 Tela de Pendências
@@ -899,7 +1304,14 @@ Antes do relatório.
 
 O sistema exibirá uma tela contendo todas as pendências encontradas.
 
-Cada pendência poderá ser resolvida individualmente.
+Cada pendência poderá ser resolvida individualmente, ou várias de uma
+vez através de "Aplicar Justificativa por Período" (Capítulo 9.8).
+
+**Fluxo inteligente**: se, ao final do Motor de Cálculo (Capítulo 6),
+não existir nenhuma pendência em aberto, a Tela de Pendências é
+desnecessária — o sistema vai direto para a Tela de Relatórios
+(Capítulo 12.8). Só quando existir pelo menos uma pendência em aberto
+a Tela de Pendências é exibida normalmente.
 
 ---
 
@@ -983,6 +1395,122 @@ Sempre permitir observações.
 
 ---
 
+## 9.7 Justificativas e Horas Negativas
+
+Quando a pendência de um dia for resolvida com uma Justificativa
+(Capítulo 9.6), o efeito dessa justificativa sobre a Hora Negativa do
+dia (Capítulo 10.3) depende de uma lista central e explícita —
+elimina a hora negativa somente quando a justificativa está nessa
+lista; qualquer justificativa fora dela mantém a hora negativa
+normalmente. Isso evita que cada nova regra futura precise mexer no
+motor de cálculo: basta incluir a justificativa na lista.
+
+**Elimina a Hora Negativa do dia:**
+
+Atestado Médico
+
+Férias
+
+Folga
+
+Licença
+
+**Não elimina a Hora Negativa do dia** (lista não-exaustiva —
+qualquer justificativa não listada acima também não elimina):
+
+Falta
+
+Falta Justificada
+
+Afastamento
+
+Consulta Médica
+
+Serviço Externo
+
+Treinamento
+
+Desligamento
+
+Esqueceu de bater
+
+Ponto não registrou
+
+Outro
+
+Um dia sem nenhuma justificativa informada (pendência ainda não
+resolvida) também não elimina a Hora Negativa.
+
+---
+
+## 9.8 Aplicar Justificativa por Período
+
+Ação disponível na Tela de Pendências (Capítulo 9.3) para aplicar a
+mesma Justificativa (Capítulo 9.6) a vários dias de um funcionário de
+uma só vez, em vez de repetir a correção dia a dia. Funciona para
+qualquer Justificativa já existente (Capítulo 9.6) — não introduz
+nenhuma justificativa nova; "Licença Maternidade"/"Licença
+Paternidade" e equivalentes usam a Justificativa "Licença" já
+existente.
+
+**Campos**: Funcionário, Justificativa, Data Inicial, Data Final.
+
+**Ao analisar o período**, cada dia do funcionário dentro do intervalo
+é classificado, sem que nenhum valor seja alterado ainda:
+
+Pendência sem Justificativa — será resolvida com a nova Justificativa.
+
+Já justificado com a mesma Justificativa — sem alteração necessária.
+
+Já justificado com outra Justificativa — conflito (Capítulo 9.8.1).
+
+Sem pendência (dia já calculado normalmente) — sem alteração; a
+Justificativa só pode ser aplicada a um dia que tenha uma pendência
+associada (Capítulo 9.1), pelo mesmo mecanismo já usado na correção
+individual (Capítulo 9.6).
+
+### 9.8.1 Tratamento de Conflitos
+
+Se algum dia do período já tiver outra Justificativa, o sistema
+pergunta como proceder, antes de aplicar qualquer coisa:
+
+Substituir as justificativas existentes desses dias pela nova.
+
+Manter as justificativas existentes (esses dias ficam de fora da
+aplicação).
+
+Perguntar conflito por conflito (uma confirmação por dia conflitante).
+
+### 9.8.2 Confirmação Inteligente
+
+Antes de aplicar qualquer alteração, o sistema mostra um resumo
+completo da operação: Funcionário, Justificativa, Período, Dias
+analisados, Pendências que serão resolvidas, Dias já justificados,
+Dias sem alteração, Conflitos encontrados e, quando a Justificativa
+for "Desligamento" (Capítulo 9.8.3), se o funcionário será inativado.
+Só depois de "Confirmar" a alteração é aplicada — "Cancelar" não
+altera nada.
+
+Cada dia efetivamente alterado é recalculado imediatamente (Capítulo
+10.7), reaproveitando exatamente o mesmo mecanismo já usado na
+correção individual de uma pendência — nenhuma regra de cálculo nova.
+
+### 9.8.3 Desligamento Inteligente
+
+Quando a Justificativa escolhida for "Desligamento": a Data Final é
+preenchida automaticamente com o último dia da competência do
+funcionário (o período restante), sem impedir o usuário de ajustá-la.
+Depois de confirmar a aplicação, o sistema pergunta:
+
+"O funcionário será desligado. Deseja também marcá-lo como Inativo?"
+
+Se "Sim": o funcionário passa para Status = Inativo (Capítulo 5.4),
+permanece cadastrado e não participa das próximas importações
+enquanto permanecer Inativo — sem reativação automática (Capítulo
+5.4).
+
+---
+
 # CAPÍTULO 10
 
 # REGRAS DE CÁLCULO
@@ -1029,13 +1557,30 @@ Saldo = Horas Trabalhadas - Jornada Prevista
 
 ## 10.5 Domingo
 
-Todo saldo positivo será Hora Extra.
+Segue a mesma fórmula do Capítulo 10.4 (Saldo = Trabalhadas − Jornada
+Prevista), usando a jornada de Domingo do Turno do funcionário
+(Capítulo 6.5) como Jornada Prevista.
+
+Quando o Turno não tiver jornada de Domingo configurada, a Jornada
+Prevista é 0 — nesse caso o Saldo é sempre igual às Horas Trabalhadas
+(nunca negativo) e, portanto, sempre Hora Extra (Capítulo 10.2), sem
+necessidade de nenhuma regra especial além da fórmula do Capítulo
+10.4.
+
+Quando o Turno tiver jornada de Domingo configurada, o dia é calculado
+normalmente como qualquer outro (podendo gerar Hora Extra ou Hora
+Negativa, conforme o Saldo).
 
 ---
 
 ## 10.6 Sábado
 
-Será utilizada a jornada cadastrada para sábado.
+Segue exatamente a mesma lógica do Domingo (Capítulo 10.5): a Jornada
+Prevista vem da jornada de Sábado do Turno do funcionário (Capítulo
+6.4). Sem jornada de Sábado configurada, a Jornada Prevista é 0 e o
+dia é tratado como um dia sem jornada prevista (Capítulo 6.4) — não
+gera Hora Negativa. Com jornada de Sábado configurada, o dia é
+calculado normalmente.
 
 ---
 
@@ -1052,7 +1597,7 @@ Sem necessidade de processar novamente toda a planilha.
 
 ## 11.1 Objetivo
 
-A Calculadora de Horas Extras Qualimix nunca alterará a planilha oficial exportada pelo relógio de ponto.
+O QualiPonto nunca alterará a planilha oficial exportada pelo relógio de ponto.
 
 A planilha original será utilizada exclusivamente para leitura dos dados.
 
@@ -1120,13 +1665,9 @@ Deverá conter:
 
 • Turno
 
-• Entrada
+• Batidas (todos os horários registrados no dia, na ordem em que ocorreram)
 
-• Saída para Almoço
-
-• Retorno do Almoço
-
-• Saída
+• Jornada Prevista
 
 • Horas Trabalhadas
 
@@ -1137,6 +1678,8 @@ Deverá conter:
 • Saldo
 
 • Situação
+
+• Justificativa (quando existir)
 
 • Observações
 
@@ -1200,6 +1743,8 @@ Exemplos de pendências:
 
 - Horário inconsistente
 
+- Turno não definido
+
 ---
 
 ### Aba 4
@@ -1236,7 +1781,7 @@ Nathan Adrian
 
 No topo do relatório deverá constar:
 
-Calculadora de Horas Extras Qualimix
+QualiPonto
 
 Nome da empresa
 
@@ -1254,7 +1799,7 @@ Logo da empresa
 
 No rodapé deverá ser exibido:
 
-"Este relatório foi gerado automaticamente pela Calculadora de Horas Extras Qualimix."
+"Este relatório foi gerado automaticamente pelo QualiPonto."
 
 "A planilha oficial exportada pelo relógio de ponto não foi modificada."
 
@@ -1295,6 +1840,157 @@ Relatorio_Horas_Julho_2026_002.xlsx
 Relatorio_Horas_Julho_2026_003.xlsx
 
 Garantindo que nenhum relatório seja perdido.
+
+---
+
+## 11.8 Relatório Individual
+
+Além do relatório geral (Capítulo 11.4, todos os funcionários), o
+sistema deverá ser capaz de gerar um relatório focado em um único
+funcionário — usado pela Tela de Relatórios (Capítulo 12.8) quando o
+usuário escolhe "Individual" em vez de "Todos".
+
+Cabeçalho do funcionário:
+
+• Nome
+
+• Cargo
+
+• Setor
+
+• Turno
+
+• Competência
+
+Tabela diária (mesmos dias do relatório geral, Capítulo 11.4 Aba 1,
+recortados para este funcionário):
+
+• Data
+
+• Dia da Semana
+
+• Batidas
+
+• Jornada Prevista
+
+• Horas Trabalhadas
+
+• Saldo
+
+• Horas Extras
+
+• Horas Negativas
+
+• Situação
+
+• Justificativa (quando existir)
+
+• Observação (quando existir)
+
+Resumo do funcionário, ao final:
+
+• Horas Previstas (soma da Jornada Prevista de todos os dias)
+
+• Horas Trabalhadas
+
+• Horas Extras
+
+• Horas Negativas
+
+• Saldo Final
+
+• Quantidade de Pendências Resolvidas
+
+• Quantidade de Pendências Existentes (ainda em aberto)
+
+Todos os valores vêm diretamente do que o Motor de Cálculo (Capítulo
+6) já produziu para aquele funcionário — nenhum cálculo é refeito
+aqui, apenas agrupado e formatado para exibição.
+
+---
+
+## 11.9 Resumo Geral da Competência
+
+Um resumo único, cobrindo todos os funcionários processados na
+competência atual:
+
+• Competência
+
+• Funcionários Processados
+
+• Funcionários com Pendência
+
+• Total de Pendências
+
+• Horas Previstas
+
+• Horas Trabalhadas
+
+• Horas Extras
+
+• Horas Negativas
+
+• Saldo Geral
+
+Assim como o Relatório Individual (Capítulo 11.8), é uma agregação
+sobre o que o Motor de Cálculo já calculou — não uma nova regra de
+cálculo.
+
+---
+
+## 11.10 Estatísticas da Competência
+
+Gerado automaticamente a partir do resultado do processamento
+(Capítulo 6):
+
+• Quantidade de funcionários ativos (Capítulo 5.8)
+
+• Quantidade de funcionários processados nesta competência
+
+• Quantidade de funcionários sem nenhuma batida no período
+
+• Quantidade de pendências por tipo (Capítulo 9.2)
+
+• Distribuição das Justificativas utilizadas (Capítulo 9.6)
+
+• Total de dias processados
+
+---
+
+## 11.11 Bloqueio por Pendências
+
+Reforça a regra já estabelecida no Capítulo 9.1: enquanto existir
+qualquer pendência em aberto (não resolvida), o sistema não deverá
+permitir gerar o relatório final (geral ou individual).
+
+A Tela de Relatórios (Capítulo 12.8) deverá exibir uma mensagem clara
+ao usuário nessa situação, por exemplo:
+
+"Existem pendências que precisam ser resolvidas antes da emissão do
+relatório."
+
+Somente depois que todas as pendências estiverem resolvidas (Capítulo
+9.3), os botões de gerar/exportar relatório deverão ficar disponíveis.
+
+---
+
+## 11.12 Exportação
+
+Excel (.xlsx) — único formato de exportação da versão 1.0, já descrito
+nos Capítulos 11.1 a 11.9. Totalmente editável, com formatação
+profissional (cabeçalho em destaque, painel congelado, bordas e
+largura de coluna ajustada) para conferência e impressão direta a
+partir do próprio Excel. A impressão (Capítulo 12.8) usa esse mesmo
+Excel gerado.
+
+A exportação em PDF foi oficialmente retirada da versão 1.0 e não
+aparece na interface (Capítulo 12.8) — nenhum botão, menu ou mensagem
+sobre PDF é exibido ao usuário. A arquitetura interna permanece
+preparada para um formato adicional (mesma interface comum a
+qualquer exportador, no padrão do Capítulo 6.6/Feriados), reservada
+para uma versão futura, mas isso é um detalhe de implementação
+invisível ao usuário.
+
 # CAPÍTULO 12
 
 # INTERFACE DO SISTEMA
@@ -1328,6 +2024,12 @@ A tela inicial deverá conter:
 • Botão Processar
 
 • Botão Funcionários
+
+• Botão Setores (Capítulo 21)
+
+• Botão Competências (Capítulo 22)
+
+• Botão Relatórios (Capítulo 12.8)
 
 • Botão Configurações
 
@@ -1367,29 +2069,47 @@ Sempre mostrando ao usuário o que está acontecendo.
 
 ## 12.4 Tela Funcionários
 
-Nesta tela será possível visualizar todos os funcionários cadastrados.
+Nesta tela será possível visualizar, cadastrar, editar, ativar/inativar
+e excluir funcionários (Capítulo 5), tanto os criados pela importação
+da planilha quanto os cadastrados manualmente.
 
-Mostrar:
+Mostrar, em formato de tabela:
 
 • Nome
 
-• ID
+• Cargo
+
+• Setor
 
 • Turno
 
 • Status
 
-• Última competência processada
-
 Permitir:
 
-Alterar turno.
+Adicionar funcionário.
 
-Ativar funcionário.
+Editar funcionário.
 
-Inativar funcionário.
+Ativar/Inativar funcionário.
 
-Nunca alterar o nome ou o ID importado da planilha.
+Excluir funcionário.
+
+Pesquisar por nome em tempo real.
+
+Ordenar a lista em ordem alfabética.
+
+Filtrar a lista (ex.: por Status, Setor ou Turno).
+
+Selecionar múltiplos funcionários (ou todos) e aplicar ações em massa
+(Capítulo 5.10): alterar Turno, alterar Setor, alterar Cargo, ativar ou
+inativar.
+
+Exibir contadores de Total, Ativos e Inativos.
+
+O ID é gerado automaticamente e nunca pode ser editado.
+
+Não é permitido cadastrar dois funcionários com o mesmo Nome Completo.
 
 ---
 
@@ -1409,15 +2129,30 @@ Permitir alterar:
 
 • Pasta do Histórico
 
-Todas as alterações deverão ser salvas automaticamente.
+Fora da primeira execução (Capítulo 4.1: "O usuário poderá alterar essas
+informações posteriormente através da tela Configurações"), esta tela
+exibe o modo de edição: os mesmos campos e a mesma validação do Wizard
+(Capítulo 4.2 a 4.8), numa única página já carregada com os valores
+atuais em vez das etapas sequenciais da primeira execução. Nenhum campo
+é salvo isoladamente a cada tecla digitada — a persistência acontece de
+uma só vez, ao clicar em "Salvar Alterações", e só quando todos os
+campos estão válidos (mesma regra de validação do Resumo do Wizard,
+Capítulo 4.9). Isso evita gravar um Turno com horário incompleto ou
+uma tolerância inconsistente no meio da edição.
+
+Turnos podem ser adicionados, editados ou removidos livremente nesta
+tela. Um Turno já existente mantém seu ID (Capítulo 5.13/21.4) ao ser
+editado — o vínculo por ID dos funcionários que o usam não se
+rompe. Editar Configurações nunca apaga ou altera Funcionários ou
+Setores — mudanças aqui ficam restritas a `configuracoes.json` e
+`empresa.json`.
 
 ---
 
 ## 12.6 Tela Histórico
 
-Mostrar todos os relatórios gerados.
-
-Organizados por:
+Mostrar todas as competências já processadas (Capítulo 14), organizadas
+por:
 
 Ano
 
@@ -1427,9 +2162,28 @@ Mês
 
 ↓
 
-Relatório
+Relatório(s) daquela competência
 
-Permitir abrir diretamente pelo sistema.
+Deverá conter:
+
+• Campo de pesquisa por competência (ex.: "Julho", "2026").
+
+• Para cada competência: informações básicas lidas do próprio
+relatório já gerado (Capítulo 11.4, Aba 4 — Informações do
+Processamento) — Empresa, quantidade de funcionários processados,
+quantidade de pendências, data/hora do processamento e quantidade de
+relatórios (arquivos) disponíveis para aquela competência. Nenhuma
+competência já fechada é recalculada para montar essa lista — os
+valores exibidos são sempre os que já estão gravados no `.xlsx`.
+
+• Para cada relatório (arquivo `.xlsx`) de uma competência: abrir
+diretamente pelo sistema operacional (a "planilha Excel correspondente"
+é o próprio arquivo do relatório, já em formato Excel — não existe uma
+cópia da planilha original do relógio de ponto guardada em lugar
+nenhum, conforme Capítulo 11.1/11.2).
+
+• Excluir um histórico (todos os relatórios de uma competência),
+mediante confirmação explícita — ação irreversível, avisada como tal.
 
 ---
 
@@ -1448,6 +2202,64 @@ Desenvolvido por Nathan Adrian
 Versão do Python
 
 Última atualização
+
+---
+
+## 12.8 Tela de Relatórios
+
+Tela dedicada para visualizar e exportar os relatórios de uma
+competência (Capítulo 11), acessível pelo botão "Relatórios" da Tela
+Inicial (Capítulo 12.2) — a qualquer momento, não só logo após um
+processamento.
+
+Deverá conter:
+
+• Seletor de Competência: lista TODAS as competências já persistidas
+(Capítulo 22), cada uma mostrando o próprio status (ex.: "Julho/2026 —
+Pendências abertas"). Trocar a seleção troca o relatório exibido/
+gerado, sem afetar as demais competências. Uma competência com
+pendência em aberto aparece normalmente na lista — apenas o bloqueio
+de geração (abaixo) fica ativo enquanto ela estiver selecionada. Uma
+competência Arquivada (Capítulo 22.3) continua aparecendo
+normalmente e pode gerar relatório de novo a qualquer momento.
+
+• Seleção de Funcionário: "Todos" (Relatório Geral, Capítulo 11.4) ou
+um funcionário específico (Relatório Individual, Capítulo 11.8).
+
+Filtros (aplicáveis apenas ao modo "Todos"):
+
+• Setor
+
+• Turno
+
+• Cargo
+
+• Status
+
+Botões:
+
+• Visualizar
+
+• Exportar Excel
+
+• Imprimir (usa o Excel gerado — Capítulo 11.12)
+
+A exportação em PDF não faz parte da interface da versão 1.0 (Capítulo
+11.12) — nenhum botão, menu ou mensagem sobre PDF é exibido nesta tela.
+
+Resumo superior, sempre visível:
+
+• Funcionários
+
+• Horas Extras
+
+• Horas Negativas
+
+• Pendências
+
+Enquanto existir qualquer pendência em aberto, os botões de exportar/
+imprimir deverão permanecer desabilitados, exibindo a mensagem do
+Capítulo 9.1/11.11.
 
 ---
 
@@ -1605,7 +2417,7 @@ Batidas
 
 ↓
 
-Resultado
+ResultadoDia
 
 ↓
 
@@ -1629,6 +2441,8 @@ Dia da Semana
 
 Batidas
 
+Jornada Prevista
+
 Horas Trabalhadas
 
 Horas Extras
@@ -1642,6 +2456,33 @@ Situação
 Pendência
 
 Essa estrutura será utilizada por todos os módulos do sistema.
+
+---
+
+## 16.1 Contrato do Motor de Cálculo
+
+Além da estrutura por funcionário/dia acima, o Motor de Cálculo
+(Capítulo 6) trabalha com mais dois objetos, usados exclusivamente
+entre `calculadora.py` e quem o chama — nunca persistidos:
+
+**ContextoCalculo** — tudo que o cálculo de um dia precisa além do
+próprio dia (Configurações, Turno, nome da empresa, competência,
+feriados). Criado uma vez por funcionário.
+
+**ResultadoProcessamento** — o resultado consolidado de processar
+todos os funcionários de uma competência: a lista de funcionários
+processados, a lista de pendências, o resumo mensal de cada
+funcionário e estatísticas gerais. É este objeto que alimenta o
+Relatório (Capítulo 11) — nenhum módulo além de `calculadora.py`
+deverá recalcular qualquer um desses valores; apenas ler, agrupar e
+formatar.
+
+**Competencia** — o `ResultadoProcessamento` acima, embrulhado junto
+com mês, ano, status (Capítulo 22), data de importação, arquivo
+original e se já foi gerado relatório. É a diferença entre um
+resultado transitório (perdido ao fechar o sistema) e um resultado
+persistido em disco (Capítulo 22) — nenhum dos dois objetos recalcula
+nada; só o Motor de Cálculo (Capítulo 6) produz valores novos.
 
 ---
 
@@ -1720,7 +2561,7 @@ Esta versão deverá ser totalmente funcional para utilização diária na empre
 
 # ARQUITETURA DE COMUNICAÇÃO
 
-A Calculadora de Horas Extras Qualimix será composta por módulos independentes.
+O QualiPonto será composto por módulos independentes.
 
 Cada módulo terá apenas uma responsabilidade.
 
@@ -1769,3 +2610,261 @@ Historico
 ↓
 
 Logs
+# CAPÍTULO 21
+
+# CADASTRO DE SETORES
+
+## 21.1 Objetivo
+
+O sistema deverá permitir o cadastro de Setores da empresa (ex.: Produção, Expedição, Administrativo), para uso futuro no vínculo com funcionários, filtros, estatísticas, gráficos e relatórios.
+
+Este cadastro é independente do Cadastro Inteligente de Funcionários (Capítulo 5) e não depende da leitura de planilha.
+
+---
+
+## 21.2 Estrutura do Setor
+
+Cada setor possuirá:
+
+ID (identificador interno, gerado automaticamente, nunca editável)
+
+Nome
+
+Cor (opcional — reservada para uso futuro em gráficos e relatórios)
+
+Status (Ativo/Inativo)
+
+---
+
+## 21.3 Tela de Gerenciamento de Setores
+
+Deverá permitir:
+
+Adicionar setor.
+
+Editar setor (nome e cor).
+
+Ativar/Inativar setor.
+
+Excluir setor — apenas se não houver nenhum funcionário vinculado a ele.
+
+Confirmação obrigatória antes de qualquer exclusão.
+
+---
+
+## 21.4 Vínculo com Funcionários
+
+Quando o Cadastro de Funcionários existir (Capítulo 5), cada funcionário deverá ser vinculado a um setor por seleção em lista, nunca por texto digitado.
+
+O vínculo deverá ser feito pelo ID do setor, nunca pelo nome.
+
+Se um setor for renomeado, todos os funcionários vinculados a ele deverão permanecer associados automaticamente, sem nenhuma ação manual.
+
+---
+
+## 21.5 Exclusão de Setor
+
+Um setor só poderá ser excluído se não existir nenhum funcionário vinculado a ele.
+
+Enquanto o Cadastro de Funcionários não existir, essa verificação não terá funcionários para checar; a estrutura de validação deverá, ainda assim, estar preparada para ser usada assim que o Cadastro de Funcionários (Capítulo 5) for implementado.
+
+---
+
+## 21.6 Persistência
+
+Os setores serão armazenados em:
+
+dados/setores.json
+
+Seguindo o mesmo padrão de leitura, escrita e backup automático já utilizado pelas demais configurações do sistema (Capítulo 13).
+
+---
+
+## 21.7 Interface
+
+Tela de Setores, seguindo o mesmo padrão visual do restante do sistema (tema escuro, botões grandes, interface limpa).
+
+Deverá conter:
+
+Lista dos setores cadastrados.
+
+Botão para adicionar novo setor.
+
+---
+
+## 21.8 Criação Automática Durante a Importação
+
+Além do cadastro manual (Capítulo 21.3), Setores também poderão ser
+criados automaticamente durante a importação de uma planilha, quando
+o campo "Dep." de algum funcionário não corresponder a nenhum Setor
+já cadastrado (Capítulo 5.17).
+
+Setores criados dessa forma seguem exatamente a mesma estrutura
+(Capítulo 21.2) e a mesma persistência (Capítulo 21.6) dos Setores
+cadastrados manualmente — não existe distinção de origem no restante
+do sistema. Após criados, são administrados normalmente pela Tela de
+Gerenciamento de Setores (Capítulo 21.3): podem ser renomeados, ter
+cor definida, ser ativados/inativados ou excluídos (respeitando a
+mesma regra de exclusão do Capítulo 21.5).
+
+Ação de editar por setor.
+
+Ação de ativar/inativar por setor.
+
+Ação de excluir por setor, com confirmação.
+
+---
+
+# CAPÍTULO 22
+
+# GERENCIAMENTO DE MÚLTIPLAS COMPETÊNCIAS
+
+## 22.1 Objetivo
+
+Antes desta funcionalidade, o sistema processava uma única competência
+por vez, inteiramente em memória — fechar o sistema sem exportar para
+o Histórico (Capítulo 12.6) perdia todo o trabalho, incluindo
+pendências já corrigidas e justificativas já preenchidas.
+
+A partir desta funcionalidade, cada planilha importada cria uma
+**Competência** (mês/ano) persistida em disco imediatamente após o
+Motor de Cálculo (Capítulo 6) processar o lote — funcionários,
+pendências, justificativas já preenchidas, resumo mensal, estatísticas
+e status. Várias competências coexistem simultaneamente, cada uma
+totalmente independente das demais.
+
+---
+
+## 22.2 O que é uma Competência
+
+Uma Competência agrupa, para um mês/ano:
+
+• Todos os funcionários processados naquela importação (com seus dias
+e batidas).
+
+• Todas as pendências geradas (Capítulo 9), resolvidas ou não.
+
+• O resumo mensal e as estatísticas (Capítulo 11.9/11.10).
+
+• Status (Capítulo 22.4), data da importação, nome do arquivo
+original e se já foi gerado algum relatório.
+
+Persistida em `dados/competencias/`, um arquivo por competência —
+nunca um único arquivo compartilhado. Isso é o que permite fechar o
+sistema no meio das pendências, a qualquer momento, sem perder nada.
+
+---
+
+## 22.3 Tela Competências
+
+Nova tela, acessível pelo botão "Competências" da Tela Inicial
+(Capítulo 12.2), mostrando um card por competência já importada:
+
+• Competência (Mês/Ano).
+
+• Data da importação.
+
+• Quantidade de funcionários.
+
+• Quantidade de pendências.
+
+• Quantidade de pendências já resolvidas.
+
+• Status (Capítulo 22.4).
+
+• Relatório gerado (Sim/Não).
+
+• Botão "Abrir" — retoma o trabalho daquela competência (Capítulo
+22.5).
+
+• Botão "Arquivar" — muda o status para Arquivada (Capítulo 22.4).
+Não existe ação de "Desarquivar" nesta versão: uma competência
+arquivada continua acessível normalmente pela Tela de Relatórios
+(Capítulo 12.8, podendo gerar relatório de novo a qualquer momento),
+apenas não pode voltar a um status anterior por esta tela.
+
+Nenhuma competência é excluída por esta tela.
+
+---
+
+## 22.4 Status da Competência
+
+Cada competência tem um dos seguintes status, reavaliado
+automaticamente a cada correção/justificativa aplicada na Tela de
+Pendências (Capítulo 9.3):
+
+• **Em andamento** — parte das pendências já foi resolvida, ainda há
+pendência em aberto.
+
+• **Pendências abertas** — nenhuma pendência foi resolvida ainda.
+
+• **Pronta para relatório** — todas as pendências foram resolvidas,
+relatório ainda não foi gerado.
+
+• **Relatório gerado** — pelo menos um relatório já foi exportado
+para esta competência, sem nenhuma pendência em aberto no momento da
+exportação. Não regride automaticamente para "Pronta para relatório".
+
+• **Arquivada** — só muda por ação manual do usuário (Capítulo 22.3);
+nenhuma reavaliação automática altera este status.
+
+("Importada" existe como valor reservado, mas não é alcançado
+automaticamente no fluxo atual: uma Competência só passa a existir
+depois que o Motor de Cálculo já processou o lote.)
+
+---
+
+## 22.5 Retomar Trabalho
+
+Ao clicar "Abrir" numa competência (Tela Competências, Capítulo 22.3):
+
+Se ainda existir pendência em aberto: abre a Tela de Pendências
+(Capítulo 9.3) exatamente com as pendências restantes — as já
+resolvidas e as justificativas já aplicadas permanecem exatamente como
+estavam antes de fechar o sistema.
+
+Se não existir mais nenhuma pendência em aberto: vai direto para a
+Tela de Relatórios (Capítulo 12.8), com esta competência já
+selecionada — mesmo comportamento do fluxo inteligente já existente
+(Capítulo 9.3) logo após um processamento.
+
+---
+
+## 22.6 Importação e Competência Já Existente
+
+Ao importar uma planilha cujo mês/ano já corresponde a uma competência
+existente, o sistema deverá perguntar antes de prosseguir:
+
+"Já existe uma competência importada para [Mês/Ano]. Deseja substituir
+a competência existente? Esta ação não pode ser desfeita."
+
+Cancelar interrompe a importação sem alterar nada. Substituir refaz
+a competência do zero a partir da nova planilha (novo processamento
+completo, Capítulo 6) — a versão anterior é copiada para backup antes
+de ser sobrescrita (mesmo mecanismo de backup automático já usado em
+todo o sistema, Capítulo 13). Nunca existem duas competências para o
+mesmo mês/ano ao mesmo tempo.
+
+---
+
+## 22.7 Relatórios Multi-Competência
+
+A Tela de Relatórios (Capítulo 12.8) passa a listar todas as
+competências persistidas, gerando o relatório de qualquer uma delas
+de forma independente — exportar o relatório de uma competência nunca
+afeta as demais. O bloqueio por pendência em aberto (Capítulo 9.1/
+11.11) se aplica normalmente à competência selecionada no momento.
+
+---
+
+## 22.8 Histórico
+
+O Histórico (Capítulo 12.6) continua funcionando exatamente como
+antes, sem nenhuma alteração: continua lendo apenas os arquivos
+`.xlsx` já exportados, sem nenhuma referência às competências geridas
+por este capítulo. Uma competência não é removida do gerenciamento
+(Capítulo 22.3) depois que um relatório é gerado.
+
+---
+
+# FIM DO CAPÍTULO 22
