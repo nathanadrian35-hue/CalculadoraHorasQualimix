@@ -355,6 +355,16 @@ novas tolerâncias entram desativadas por padrão). Ver `CHANGELOG.md` para deta
 
 ---
 
+# Objetivo da Versão 1.1.1
+
+Correção definitiva de um bug visual da Wizard de configuração inicial: a etapa de
+Tolerâncias (introduzida na v1.1) ficava encoberta pela etapa anterior (Turnos) devido
+ao uso de um container de rolagem incompatível com a navegação por `tkraise()` desta
+tela. Corrigido usando o mesmo tipo de container das demais etapas — nenhuma regra de
+cálculo, configuração ou persistência foi alterada. Ver `CHANGELOG.md` para detalhes.
+
+---
+
 # Futuras Versões
 
 - Dashboard

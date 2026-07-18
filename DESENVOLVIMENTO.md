@@ -447,6 +447,52 @@ arquivos.
 
 ---
 
+# SPRINT 7.1 (v1.1.1) — Correção da Wizard
+
+## Objetivo
+
+Corrigir um bug visual encontrado após a publicação da v1.1: na Wizard
+de primeira execução, a etapa de Tolerâncias (Cap. 4.7) ficava
+encoberta pela etapa anterior (Turnos) ao clicar em "Próximo" — o
+índice interno avançava corretamente ("Etapa 4 de 7"), mas o conteúdo
+exibido continuava sendo o de Turnos. Depois de concluir a Wizard, a
+tela Configurações sempre mostrou as tolerâncias normalmente, por usar
+um container diferente.
+
+## Causa raiz
+
+`_montar_etapa_wizard_tolerancias()` usava `ctk.CTkScrollableFrame`
+como o próprio container da página, para caber os quatro grupos de
+tolerância. Nesta tela, as 7 etapas da Wizard ficam todas empilhadas
+na mesma célula do grid e são alternadas por `tkraise()` — um
+`CTkScrollableFrame` usado como página não respeita esse `tkraise()`
+(a página anterior permanece visível por cima), ao contrário de um
+`CTkFrame` comum, usado por todas as outras 6 etapas.
+
+### Arquivos
+
+- tela_configuracoes.py (`_montar_etapa_wizard_tolerancias` volta a
+  usar `ctk.CTkFrame`, o mesmo container de todas as demais etapas)
+- CHANGELOG.md / README.md (registro da correção)
+
+### Funcionalidades
+
+Nenhuma nova — correção pontual de exibição. As quatro tolerâncias
+continuam funcionando exatamente como na v1.1 (motor de cálculo e
+`configuracoes.json` intocados).
+
+### Critério de conclusão
+
+Bug reproduzido com automação real de mouse (clique físico simulado +
+captura de tela, não apenas chamadas programáticas — que não
+reproduziam o problema), e a correção confirmada da mesma forma.
+Testes unitários dos 4 pontos de tolerância, homologação com planilha
+real, reprocessamento, Dashboard/Competências/Histórico e regressão
+completa reexecutados e aprovados. Análise estática
+(pyflakes/pycodestyle/mypy) limpa em todos os arquivos.
+
+---
+
 # REGRAS
 
 - Seguir obrigatoriamente o README.md.

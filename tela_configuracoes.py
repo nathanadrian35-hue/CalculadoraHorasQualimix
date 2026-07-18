@@ -1171,17 +1171,26 @@ class TelaConfiguracoes(ctk.CTkFrame):
         Retorno do Almoço e Saída Final. Todos reaproveitam o mesmo
         componente `_montar_bloco_tolerancia` (Etapa 2.1/2.2), sem
         nenhuma lógica de campo nova.
+
+        Precisa ser um `CTkFrame` comum — o mesmo container usado por
+        todas as demais etapas do Wizard —, nunca um
+        `CTkScrollableFrame` diretamente aqui: nesta tela, todas as 7
+        etapas ficam empilhadas na mesma célula do grid e são
+        alternadas por `tkraise()` (Cap. 4); um `CTkScrollableFrame`
+        usado como a própria página não respeita esse `tkraise()`
+        (a página anterior continua visível por cima), fazendo esta
+        etapa parecer "pulada" — bug corrigido na v1.1.1.
         """
-        etapa = ctk.CTkScrollableFrame(master, fg_color="transparent")
+        etapa = ctk.CTkFrame(master, fg_color="transparent")
         self._montar_bloco_tolerancia(
             etapa, chave="entrada", titulo="Tolerância de Entrada",
-        ).pack(fill="x", pady=(0, 15))
+        ).pack(fill="x", pady=(0, 10))
         self._montar_bloco_tolerancia(
             etapa, chave="saida_almoco", titulo="Tolerância de Saída para o Almoço",
-        ).pack(fill="x", pady=(0, 15))
+        ).pack(fill="x", pady=(0, 10))
         self._montar_bloco_tolerancia(
             etapa, chave="almoco", titulo="Tolerância de Retorno do Almoço",
-        ).pack(fill="x", pady=(0, 15))
+        ).pack(fill="x", pady=(0, 10))
         self._montar_bloco_tolerancia(
             etapa, chave="saida", titulo="Tolerância de Saída Final",
         ).pack(fill="x")

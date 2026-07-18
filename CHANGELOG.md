@@ -2,6 +2,30 @@
 
 Todas as mudanças notáveis do QualiPonto são documentadas neste arquivo.
 
+## [1.1.1] - 2026-07-17
+
+### Corrigido
+
+- **Wizard de configuração inicial pulava visualmente a etapa de Tolerâncias.**
+  Ao clicar em "Próximo" na etapa de Turnos, a Wizard avançava corretamente seu
+  índice interno (o rótulo "Etapa 4 de 7" já aparecia certo), mas a tela
+  continuava mostrando o conteúdo da etapa anterior (Turnos) por cima — os
+  quatro grupos de tolerância existiam e tinham valores padrão corretos, mas
+  ficavam inacessíveis visualmente durante a primeira execução. Depois de
+  concluir a Wizard, a tela Configurações (modo de edição) sempre mostrou tudo
+  normalmente, porque usa um container diferente do da Wizard.
+  **Causa raiz:** a etapa de Tolerâncias havia sido implementada em `1.1.0`
+  usando `CTkScrollableFrame` como o próprio container da página, para caber
+  os quatro grupos. Nesta tela, todas as 7 etapas da Wizard ficam empilhadas
+  na mesma célula do layout e são alternadas por `tkraise()`; um
+  `CTkScrollableFrame` usado dessa forma não respeita esse `tkraise()` (a
+  página anterior permanece visível por cima), diferente de um `CTkFrame`
+  comum — usado por todas as outras 6 etapas.
+  **Correção:** a etapa de Tolerâncias volta a usar um `CTkFrame` comum,
+  exatamente o mesmo padrão das demais etapas da Wizard e do modo de edição.
+  Nenhuma lógica de configuração, cálculo ou persistência foi alterada — o
+  bug era puramente de exibição durante a Wizard.
+
 ## [1.1.0] - 2026-07-17
 
 ### Adicionado
