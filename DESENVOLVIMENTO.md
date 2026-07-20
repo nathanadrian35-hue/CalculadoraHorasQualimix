@@ -493,6 +493,72 @@ completa reexecutados e aprovados. Análise estática
 
 ---
 
+# SPRINT 8 (v2.0) — Competência Incremental, Importação Semanal e Dashboard
+
+## Objetivo
+
+Evoluir o sistema para o fluxo real do RH: a planilha é exportada
+semanalmente, sempre com o layout do mês inteiro, mas só com os dias já
+ocorridos preenchidos. Passar a atualizar a mesma competência
+incrementalmente a cada importação, sem remover nenhuma funcionalidade
+existente e sem alterar nenhum resultado de cálculo já produzido.
+
+### Arquivos
+
+- calculadora.py (dia futuro sem batida não gera pendência — nova
+  função `_ultimo_dia_com_dados`, novo ramo em `recalcular_dia`)
+- constantes.py (`StatusSimplificado`, `VERSAO = "2.0.0"`)
+- modelos.py (`RegistroImportacao`, `RegistroAuditoria`, `Competencia`
+  estendida: `fechada`, `data_fechamento`, `quantidade_importacoes`,
+  `historico_importacoes`, `auditoria`; `ContextoCalculo.ultimo_dia_com_dados`)
+- competencias.py (sincronização incremental, proteção de dia corrigido,
+  índice leve para performance, fechar/reabrir, auditoria, histórico de
+  importações)
+- tela_principal.py (importação passa a sincronizar em vez de
+  substituir; confirmação extra para competência fechada)
+- tela_pendencias.py (hooks de auditoria em correção manual e
+  Justificativa por Período)
+- tela_competencias.py (selo simplificado, Fechar/Reabrir, Histórico)
+- tela_relatorios.py (período, novos filtros, bloqueio por pendência
+  restrito ao recorte selecionado)
+- tela_dashboard.py (novo — Dashboard in-app)
+- relatorio.py (`filtrar_por_periodo`, `filtrar_por_atributos`, nova
+  aba "Dashboard" no Excel com gráficos nativos)
+- interface.py (registro da tela Dashboard)
+
+### Funcionalidades
+
+- Importação semanal incremental por competência, com proteção de
+  correções manuais e justificativas já resolvidas
+- Dia futuro (sem batida, após o último dia com dado do lote) não gera
+  mais pendência falsa
+- Histórico de importações e auditoria (usuário do Windows,
+  quando/o quê/valor anterior/valor novo) por competência
+- Fechamento/reabertura de competência, com confirmação extra ao
+  reimportar sobre uma competência fechada
+- Relatórios por período (mês completo ou intervalo personalizado) e
+  novos filtros (Situação, Pendências, Horas Extras, Banco de Horas)
+- Dashboard in-app e aba "Dashboard" no Excel (gráficos nativos
+  openpyxl, sem dependência nova)
+- "Banco de Horas" como sinônimo do Saldo já existente — nenhuma regra
+  de acúmulo nova
+
+### Critério de conclusão
+
+Convergência confirmada entre 4 importações incrementais sequenciais e
+o processamento completo de uma só vez, usando as duas planilhas reais
+do projeto (Julho/2026 e Abril/2026): mesmo conjunto de dias, mesmos
+valores calculados. Proteção de dia corrigido manualmente confirmada
+sobrevivendo a uma reimportação completa subsequente. Regressão
+confirmando que os filtros padrão da Tela de Relatórios (sem tocar nos
+novos controles) reproduzem exatamente o comportamento anterior ao
+v2.0, e que as 4 abas originais do Excel permanecem inalteradas.
+Auditoria testada ponta a ponta (correção individual, reaplicação
+idempotente, Justificativa por Período em lote). Análise estática
+(pyflakes/pycodestyle/mypy) limpa em todos os arquivos.
+
+---
+
 # REGRAS
 
 - Seguir obrigatoriamente o README.md.

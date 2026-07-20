@@ -264,7 +264,7 @@ class _DialogoJustificativaPeriodo(ctk.CTkToplevel):
         config: Config,
         funcionarios: list[Funcionario],
         construir_contexto: Callable[[Funcionario], ContextoCalculo | None],
-        ao_confirmar: Callable[[], None],
+        ao_confirmar: Callable[[Funcionario, str, list[DiaTrabalho]], None],
     ) -> None:
         super().__init__(master)
         self.title("Aplicar Justificativa por Período")
@@ -502,7 +502,7 @@ class _DialogoJustificativaPeriodo(ctk.CTkToplevel):
                 self._marcar_inativo(analise.funcionario)
 
         self.destroy()
-        self._ao_confirmar()
+        self._ao_confirmar(analise.funcionario, analise.justificativa, dias_para_aplicar)
 
     def _marcar_inativo(self, funcionario: Funcionario) -> None:
         """Desligamento Inteligente (Cap. 9.8.3): marca Status = Inativo e persiste no cadastro."""
@@ -788,6 +788,10 @@ class TelaPendencias(ctk.CTkFrame):
             return
 
         dia = linha.dia
+        batidas_antes = self._texto_batidas(dia)
+        justificativa_antes = dia.pendencia.justificativa if dia.pendencia is not None else ""
+        observacoes_antes = dia.pendencia.observacoes if dia.pendencia is not None else ""
+
         novas_batidas = [
             Batida(horario=horario, manual=True)
             for texto in linha.horarios_texto()
@@ -808,8 +812,53 @@ class TelaPendencias(ctk.CTkFrame):
                 funcionario.nome_completo, dia.data.strftime("%d/%m/%Y"),
             )
 
+        self._registrar_auditoria_correcao(
+            funcionario, dia, batidas_antes, justificativa_antes, observacoes_antes)
+
         self._atualizar_lista()
         self._persistir()
+
+    def _texto_batidas(self, dia: DiaTrabalho) -> str:
+        return ", ".join(_horario_para_texto(batida.horario) for batida in dia.batidas)
+
+    def _registrar_auditoria_correcao(
+        self, funcionario: Funcionario, dia: DiaTrabalho,
+        batidas_antes: str, justificativa_antes: str, observacoes_antes: str,
+    ) -> None:
+        """
+        Auditoria (Etapa 13, v2.0): registra quem/quando/o quê/valor
+        anterior/valor novo para cada campo efetivamente alterado por
+        uma correção manual — nunca grava um evento para um campo que
+        não mudou. Fica em memória em `Competencia.auditoria`, gravado
+        junto com `_persistir()` logo em seguida.
+        """
+        if self._competencia is None:
+            return
+        quando = dia.data.strftime("%d/%m/%Y")
+
+        batidas_depois = self._texto_batidas(dia)
+        if batidas_depois != batidas_antes:
+            competencias.registrar_auditoria(
+                self._competencia,
+                o_que=f"Batidas corrigidas — {funcionario.nome_completo} em {quando}",
+                valor_anterior=batidas_antes or "—", valor_novo=batidas_depois or "—",
+            )
+
+        justificativa_depois = dia.pendencia.justificativa if dia.pendencia is not None else ""
+        if justificativa_depois != justificativa_antes:
+            competencias.registrar_auditoria(
+                self._competencia,
+                o_que=f"Justificativa alterada — {funcionario.nome_completo} em {quando}",
+                valor_anterior=justificativa_antes or "—", valor_novo=justificativa_depois or "—",
+            )
+
+        observacoes_depois = dia.pendencia.observacoes if dia.pendencia is not None else ""
+        if observacoes_depois != observacoes_antes:
+            competencias.registrar_auditoria(
+                self._competencia,
+                o_que=f"Observações alteradas — {funcionario.nome_completo} em {quando}",
+                valor_anterior=observacoes_antes or "—", valor_novo=observacoes_depois or "—",
+            )
 
     # -- Persistência incremental (gerenciamento de múltiplas competências) --
 
@@ -844,8 +893,26 @@ class TelaPendencias(ctk.CTkFrame):
             ao_confirmar=self._ao_confirmar_justificativa_periodo,
         )
 
-    def _ao_confirmar_justificativa_periodo(self) -> None:
-        """Callback de `_DialogoJustificativaPeriodo`: atualiza a lista e persiste."""
+    def _ao_confirmar_justificativa_periodo(
+        self, funcionario: Funcionario, justificativa: str, dias: list[DiaTrabalho],
+    ) -> None:
+        """
+        Callback de `_DialogoJustificativaPeriodo`: audita (Etapa 13, v2.0
+        — um único evento agregado para a operação em lote, no mesmo
+        espírito de `competencias.registrar_importacao`), atualiza a
+        lista e persiste.
+        """
+        if self._competencia is not None and dias:
+            datas = sorted(dia.data for dia in dias)
+            competencias.registrar_auditoria(
+                self._competencia,
+                o_que=(
+                    f"Justificativa por período aplicada — {funcionario.nome_completo} "
+                    f"({datas[0].strftime('%d/%m/%Y')} a {datas[-1].strftime('%d/%m/%Y')})"
+                ),
+                valor_anterior=f"{len(dias)} dia(s) sem esta justificativa",
+                valor_novo=f'"{justificativa}" aplicada a {len(dias)} dia(s)',
+            )
         self._atualizar_lista()
         self._persistir()
 

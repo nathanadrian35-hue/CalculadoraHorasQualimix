@@ -19,7 +19,7 @@ from enum import Enum
 
 APP_NOME: str = "QualiPonto"
 APP_NOME_CURTO: str = "Sistema de Controle de Jornada e Horas Extras"
-VERSAO: str = "1.1.1"
+VERSAO: str = "2.0.0"
 DESENVOLVEDOR: str = "Nathan Adrian"
 
 
@@ -147,6 +147,20 @@ class StatusCompetencia(str, Enum):
     PRONTA_PARA_RELATORIO = "Pronta para relatório"
     RELATORIO_GERADO = "Relatório gerado"
     ARQUIVADA = "Arquivada"
+
+
+class StatusSimplificado(str, Enum):
+    """
+    Selo simplificado de 3 estados de uma Competência (Cap. novo, v2.0):
+    visão resumida para a Tela de Competências e o Dashboard, calculada
+    a partir do estado real (`competencias.status_simplificado()`) —
+    nunca persistida por si só, nunca substitui `StatusCompetencia`
+    (que continua controlando o fluxo detalhado existente).
+    """
+
+    EM_ANDAMENTO = "🟢 Em andamento"
+    AGUARDANDO_PENDENCIAS = "🟡 Aguardando pendências"
+    FECHADA = "🔴 Fechada"
 
 
 # ---------------------------------------------------------------------------

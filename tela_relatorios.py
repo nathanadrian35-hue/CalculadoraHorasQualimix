@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from tkinter import messagebox
 
@@ -25,7 +26,7 @@ import customtkinter as ctk
 
 import competencias
 from config import Config
-from constantes import StatusCompetencia, StatusFuncionario, formatar_minutos, nome_mes
+from constantes import Situacao, StatusCompetencia, StatusFuncionario, formatar_minutos, nome_mes
 from logger import get_logger
 from modelos import Competencia, Funcionario, ResultadoProcessamento
 from relatorio import (
@@ -34,6 +35,8 @@ from relatorio import (
     RelatorioBloqueadoError,
     caminho_historico,
     existem_pendencias_abertas,
+    filtrar_por_atributos,
+    filtrar_por_periodo,
     filtrar_resultado,
     montar_dados_relatorio,
     montar_resumo_geral,
@@ -42,6 +45,26 @@ from relatorio import (
 log = get_logger()
 
 _TODOS = "Todos"
+_PERIODO_MES_COMPLETO = "Mês completo"
+_PERIODO_PERSONALIZADO = "Personalizado"
+_COM_PENDENCIA = "Com pendência"
+_SEM_PENDENCIA = "Sem pendência"
+_COM_HORAS_EXTRAS = "Com horas extras"
+_SEM_HORAS_EXTRAS = "Sem horas extras"
+_BANCO_POSITIVO = "Positivo"
+_BANCO_NEGATIVO = "Negativo"
+_BANCO_ZERADO = "Zerado"
+
+
+def _texto_para_data(texto: str) -> date | None:
+    """Converte "DD/MM/AAAA" em `date`. Retorna None se vazio/inválido."""
+    texto = texto.strip()
+    if not texto:
+        return None
+    try:
+        return datetime.strptime(texto, "%d/%m/%Y").date()
+    except ValueError:
+        return None
 
 
 class TelaRelatorios(ctk.CTkFrame):
@@ -59,11 +82,12 @@ class TelaRelatorios(ctk.CTkFrame):
         self._rotulos_competencia: dict[str, Competencia] = {}
         self._exportador_excel = ExportadorExcel()
 
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(4, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         self._montar_cabecalho()
         self._montar_resumo_superior()
+        self._montar_periodo()
         self._montar_filtros()
         self._montar_area_principal()
 
@@ -118,55 +142,184 @@ class TelaRelatorios(ctk.CTkFrame):
         rotulo_valor.pack(anchor="w", padx=15, pady=(0, 10))
         return rotulo_valor
 
-    def _montar_filtros(self) -> None:
-        """Funcionário (Todos/Individual) + filtros de Setor/Turno/Cargo/Status (Cap. 12.8)."""
+    def _montar_periodo(self) -> None:
+        """
+        Período do relatório (Etapa 8 v2.0): dia/semana/quinzena/intervalo
+        personalizado/mês completo — independente do fechamento da
+        competência. "Mês completo" (padrão) preserva o comportamento
+        anterior ao v2.0 (nenhum filtro de data aplicado). Os três botões
+        de atalho só preenchem os campos "De"/"Até" com um intervalo
+        pronto; o filtro em si é sempre resolvido a partir desses dois
+        campos quando o modo é "Personalizado" (ver `_intervalo_periodo_selecionado`).
+        """
         barra = ctk.CTkFrame(self, fg_color="transparent")
         barra.grid(row=2, column=0, sticky="ew", padx=30, pady=(15, 0))
+
+        ctk.CTkLabel(barra, text="Período").grid(row=0, column=0, sticky="w", padx=(0, 5))
+        self._var_periodo = tk.StringVar(value=_PERIODO_MES_COMPLETO)
+        self._menu_periodo = ctk.CTkOptionMenu(
+            barra, values=[_PERIODO_MES_COMPLETO, _PERIODO_PERSONALIZADO],
+            variable=self._var_periodo, width=150,
+            command=lambda valor: self._ao_alterar_periodo(),
+        )
+        self._menu_periodo.grid(row=0, column=1, padx=(0, 15))
+
+        ctk.CTkLabel(barra, text="De").grid(row=0, column=2, sticky="w", padx=(0, 5))
+        self._entry_periodo_inicio = ctk.CTkEntry(barra, placeholder_text="DD/MM/AAAA", width=100)
+        self._entry_periodo_inicio.grid(row=0, column=3, padx=(0, 15))
+        self._entry_periodo_inicio.bind("<KeyRelease>", lambda evento: self._atualizar())
+
+        ctk.CTkLabel(barra, text="Até").grid(row=0, column=4, sticky="w", padx=(0, 5))
+        self._entry_periodo_fim = ctk.CTkEntry(barra, placeholder_text="DD/MM/AAAA", width=100)
+        self._entry_periodo_fim.grid(row=0, column=5, padx=(0, 15))
+        self._entry_periodo_fim.bind("<KeyRelease>", lambda evento: self._atualizar())
+
+        ctk.CTkButton(
+            barra, text="Hoje", width=70, command=lambda: self._definir_periodo_preset(0),
+        ).grid(row=0, column=6, padx=(0, 8))
+        ctk.CTkButton(
+            barra, text="Esta Semana", width=100,
+            command=lambda: self._definir_periodo_preset(6),
+        ).grid(row=0, column=7, padx=(0, 8))
+        ctk.CTkButton(
+            barra, text="Quinzena", width=90, command=lambda: self._definir_periodo_preset(14),
+        ).grid(row=0, column=8)
+
+        # Estado inicial dos campos "De"/"Até" (desabilitados — "Mês
+        # completo" é o padrão): configurado diretamente, sem passar por
+        # `_ao_alterar_periodo()`/`_atualizar()`, porque neste ponto da
+        # construção da tela `_montar_area_principal()` ainda não rodou
+        # (widgets como `_rotulo_bloqueio` ainda não existem).
+        self._entry_periodo_inicio.configure(state="disabled")
+        self._entry_periodo_fim.configure(state="disabled")
+
+    def _ao_alterar_periodo(self) -> None:
+        personalizado = self._var_periodo.get() == _PERIODO_PERSONALIZADO
+        estado = "normal" if personalizado else "disabled"
+        self._entry_periodo_inicio.configure(state=estado)
+        self._entry_periodo_fim.configure(state=estado)
+        self._atualizar()
+
+    def _definir_periodo_preset(self, dias_atras: int) -> None:
+        fim = date.today()
+        inicio = fim - timedelta(days=dias_atras)
+        self._var_periodo.set(_PERIODO_PERSONALIZADO)
+        self._entry_periodo_inicio.configure(state="normal")
+        self._entry_periodo_fim.configure(state="normal")
+        self._entry_periodo_inicio.delete(0, "end")
+        self._entry_periodo_inicio.insert(0, inicio.strftime("%d/%m/%Y"))
+        self._entry_periodo_fim.delete(0, "end")
+        self._entry_periodo_fim.insert(0, fim.strftime("%d/%m/%Y"))
+        self._atualizar()
+
+    def _intervalo_periodo_selecionado(self) -> tuple[date, date] | None:
+        """None = sem filtro de período ("Mês completo" — comportamento pré-v2.0)."""
+        if self._var_periodo.get() != _PERIODO_PERSONALIZADO:
+            return None
+        inicio = _texto_para_data(self._entry_periodo_inicio.get())
+        fim = _texto_para_data(self._entry_periodo_fim.get())
+        if inicio is None or fim is None:
+            return None
+        if inicio > fim:
+            inicio, fim = fim, inicio
+        return inicio, fim
+
+    def _montar_filtros(self) -> None:
+        """
+        Funcionário (Todos/Individual) + filtros de Setor/Turno/Cargo/Status
+        (Cap. 12.8), mais os novos filtros de Situação/Pendências/Horas
+        Extras/Banco de Horas (Etapa 9 v2.0) — 3 filtros por linha (em vez
+        de 5 numa única linha) para que todos caibam na largura padrão da
+        janela (1000px) sem ficar cortados fora da área visível.
+        """
+        barra = ctk.CTkFrame(self, fg_color="transparent")
+        barra.grid(row=3, column=0, sticky="ew", padx=30, pady=(15, 0))
+
+        def _rotulo(texto: str, coluna: int, linha: int) -> None:
+            pady = (0, 0) if linha == 0 else (10, 0)
+            ctk.CTkLabel(barra, text=texto).grid(
+                row=linha, column=coluna, sticky="w", padx=(0, 5), pady=pady)
 
         ctk.CTkLabel(barra, text="Funcionário").grid(row=0, column=0, sticky="w", padx=(0, 5))
         self._var_funcionario = tk.StringVar(value=_TODOS)
         self._menu_funcionario = ctk.CTkOptionMenu(
-            barra, values=[_TODOS], variable=self._var_funcionario, width=180,
+            barra, values=[_TODOS], variable=self._var_funcionario, width=200,
             command=lambda valor: self._ao_alterar_modo(),
         )
-        self._menu_funcionario.grid(row=0, column=1, padx=(0, 15))
+        self._menu_funcionario.grid(row=0, column=1, padx=(0, 30))
 
-        ctk.CTkLabel(barra, text="Setor").grid(row=0, column=2, sticky="w", padx=(0, 5))
+        _rotulo("Setor", 2, 0)
         self._var_setor = tk.StringVar(value=_TODOS)
         self._menu_setor = ctk.CTkOptionMenu(
-            barra, values=[_TODOS], variable=self._var_setor, width=140,
+            barra, values=[_TODOS], variable=self._var_setor, width=200,
             command=lambda valor: self._atualizar(),
         )
-        self._menu_setor.grid(row=0, column=3, padx=(0, 15))
+        self._menu_setor.grid(row=0, column=3, padx=(0, 30))
 
-        ctk.CTkLabel(barra, text="Turno").grid(row=0, column=4, sticky="w", padx=(0, 5))
+        _rotulo("Turno", 4, 0)
         self._var_turno = tk.StringVar(value=_TODOS)
         self._menu_turno = ctk.CTkOptionMenu(
-            barra, values=[_TODOS], variable=self._var_turno, width=140,
+            barra, values=[_TODOS], variable=self._var_turno, width=200,
             command=lambda valor: self._atualizar(),
         )
-        self._menu_turno.grid(row=0, column=5, padx=(0, 15))
+        self._menu_turno.grid(row=0, column=5)
 
-        ctk.CTkLabel(barra, text="Cargo").grid(row=0, column=6, sticky="w", padx=(0, 5))
+        _rotulo("Cargo", 0, 1)
         self._var_cargo = tk.StringVar(value=_TODOS)
         self._menu_cargo = ctk.CTkOptionMenu(
-            barra, values=[_TODOS], variable=self._var_cargo, width=140,
+            barra, values=[_TODOS], variable=self._var_cargo, width=200,
             command=lambda valor: self._atualizar(),
         )
-        self._menu_cargo.grid(row=0, column=7, padx=(0, 15))
+        self._menu_cargo.grid(row=1, column=1, padx=(0, 30), pady=(10, 0))
 
-        ctk.CTkLabel(barra, text="Status").grid(row=0, column=8, sticky="w", padx=(0, 5))
+        _rotulo("Status", 2, 1)
         self._var_status = tk.StringVar(value=_TODOS)
         self._menu_status = ctk.CTkOptionMenu(
             barra, values=[_TODOS, StatusFuncionario.ATIVO.value, StatusFuncionario.INATIVO.value],
-            variable=self._var_status, width=120,
+            variable=self._var_status, width=200,
             command=lambda valor: self._atualizar(),
         )
-        self._menu_status.grid(row=0, column=9)
+        self._menu_status.grid(row=1, column=3, padx=(0, 30), pady=(10, 0))
+
+        _rotulo("Situação", 4, 1)
+        self._var_situacao_filtro = tk.StringVar(value=_TODOS)
+        self._menu_situacao_filtro = ctk.CTkOptionMenu(
+            barra, values=[_TODOS] + [s.value for s in Situacao],
+            variable=self._var_situacao_filtro, width=200,
+            command=lambda valor: self._atualizar(),
+        )
+        self._menu_situacao_filtro.grid(row=1, column=5, pady=(10, 0))
+
+        _rotulo("Pendências", 0, 2)
+        self._var_pendencia_filtro = tk.StringVar(value=_TODOS)
+        self._menu_pendencia_filtro = ctk.CTkOptionMenu(
+            barra, values=[_TODOS, _COM_PENDENCIA, _SEM_PENDENCIA],
+            variable=self._var_pendencia_filtro, width=200,
+            command=lambda valor: self._atualizar(),
+        )
+        self._menu_pendencia_filtro.grid(row=2, column=1, padx=(0, 30), pady=(10, 0))
+
+        _rotulo("Horas Extras", 2, 2)
+        self._var_extras_filtro = tk.StringVar(value=_TODOS)
+        self._menu_extras_filtro = ctk.CTkOptionMenu(
+            barra, values=[_TODOS, _COM_HORAS_EXTRAS, _SEM_HORAS_EXTRAS],
+            variable=self._var_extras_filtro, width=200,
+            command=lambda valor: self._atualizar(),
+        )
+        self._menu_extras_filtro.grid(row=2, column=3, padx=(0, 30), pady=(10, 0))
+
+        _rotulo("Banco de Horas", 4, 2)
+        self._var_banco_filtro = tk.StringVar(value=_TODOS)
+        self._menu_banco_filtro = ctk.CTkOptionMenu(
+            barra, values=[_TODOS, _BANCO_POSITIVO, _BANCO_NEGATIVO, _BANCO_ZERADO],
+            variable=self._var_banco_filtro, width=200,
+            command=lambda valor: self._atualizar(),
+        )
+        self._menu_banco_filtro.grid(row=2, column=5, pady=(10, 0))
 
     def _montar_area_principal(self) -> None:
         area = ctk.CTkFrame(self, fg_color="transparent")
-        area.grid(row=3, column=0, sticky="nsew", padx=30, pady=15)
+        area.grid(row=4, column=0, sticky="nsew", padx=30, pady=15)
         area.grid_rowconfigure(1, weight=1)
         area.grid_columnconfigure(0, weight=1)
 
@@ -328,31 +481,70 @@ class TelaRelatorios(ctk.CTkFrame):
         self._atualizar()
 
     def _resultado_filtrado(self) -> ResultadoProcessamento | None:
+        """
+        Compõe, em sequência, todos os filtros ativos da tela (Etapas 8/9
+        v2.0): período → Funcionário individual OU Setor/Turno/Cargo/Status
+        → Situação/Pendências/Horas Extras/Banco de Horas. Cada etapa parte
+        do resultado da etapa anterior, então os filtros são sempre
+        combináveis entre si (ex.: uma semana específica + só quem tem
+        horas extras).
+        """
         if self._resultado is None:
             return None
+
+        resultado = self._resultado
+
+        intervalo = self._intervalo_periodo_selecionado()
+        if intervalo is not None:
+            resultado = filtrar_por_periodo(resultado, intervalo[0], intervalo[1])
+
         if self._var_funcionario.get() != _TODOS:
             funcionario = next(
-                (f for f in self._resultado.funcionarios_processados
+                (f for f in resultado.funcionarios_processados
                  if f.nome_completo == self._var_funcionario.get()),
                 None,
             )
-            if funcionario is None:
-                return self._resultado
-            return filtrar_resultado(self._resultado, funcionario_id=funcionario.id)
+            if funcionario is not None:
+                resultado = filtrar_resultado(resultado, funcionario_id=funcionario.id)
+        else:
+            setor_id = self._id_por_nome(
+                self._var_setor.get(), self.config_app.setores.get("setores", []))
+            turno_id = self._id_por_nome(
+                self._var_turno.get(), self.config_app.configuracoes.get("turnos", []))
+            cargo = None if self._var_cargo.get() == _TODOS else self._var_cargo.get()
+            status = (
+                None if self._var_status.get() == _TODOS
+                else StatusFuncionario(self._var_status.get())
+            )
+            resultado = filtrar_resultado(
+                resultado, setor_id=setor_id, turno_id=turno_id, cargo=cargo, status=status,
+            )
 
-        setor_id = self._id_por_nome(
-            self._var_setor.get(), self.config_app.setores.get("setores", []))
-        turno_id = self._id_por_nome(
-            self._var_turno.get(), self.config_app.configuracoes.get("turnos", []))
-        cargo = None if self._var_cargo.get() == _TODOS else self._var_cargo.get()
-        status = (
-            None if self._var_status.get() == _TODOS
-            else StatusFuncionario(self._var_status.get())
+        situacao = (
+            None if self._var_situacao_filtro.get() == _TODOS
+            else Situacao(self._var_situacao_filtro.get())
         )
+        com_pendencia = {
+            _TODOS: None, _COM_PENDENCIA: True, _SEM_PENDENCIA: False,
+        }[self._var_pendencia_filtro.get()]
+        com_horas_extras = {
+            _TODOS: None, _COM_HORAS_EXTRAS: True, _SEM_HORAS_EXTRAS: False,
+        }[self._var_extras_filtro.get()]
+        banco_horas = {
+            _TODOS: None, _BANCO_POSITIVO: "positivo",
+            _BANCO_NEGATIVO: "negativo", _BANCO_ZERADO: "zerado",
+        }[self._var_banco_filtro.get()]
 
-        return filtrar_resultado(
-            self._resultado, setor_id=setor_id, turno_id=turno_id, cargo=cargo, status=status,
-        )
+        if (
+            situacao is not None or com_pendencia is not None
+            or com_horas_extras is not None or banco_horas is not None
+        ):
+            resultado = filtrar_por_atributos(
+                resultado, situacao=situacao, com_pendencia=com_pendencia,
+                com_horas_extras=com_horas_extras, banco_horas=banco_horas,
+            )
+
+        return resultado
 
     def _id_por_nome(self, nome: str, itens: list[dict]) -> str | None:
         if nome == _TODOS:
@@ -378,14 +570,18 @@ class TelaRelatorios(ctk.CTkFrame):
             self._definir_acoes_habilitadas(False)
             return
 
-        resumo_geral = montar_resumo_geral(self._resultado, self._competencia_texto())
+        resultado_filtrado = self._resultado_filtrado() or self._resultado
+        resumo_geral = montar_resumo_geral(resultado_filtrado, self._competencia_texto())
         self._rotulo_card_funcionarios.configure(text=str(resumo_geral.funcionarios_processados))
         self._rotulo_card_extras.configure(text=formatar_minutos(resumo_geral.horas_extras_min))
         self._rotulo_card_negativas.configure(
             text=formatar_minutos(resumo_geral.horas_negativas_min))
         self._rotulo_card_pendencias.configure(text=str(resumo_geral.total_pendencias))
 
-        if existem_pendencias_abertas(self._resultado):
+        # Etapas 8/9 v2.0: o bloqueio por pendência considera apenas o
+        # recorte selecionado (período/filtros), não a competência inteira
+        # — relatório por período não depende do fechamento da competência.
+        if existem_pendencias_abertas(resultado_filtrado):
             self._rotulo_bloqueio.configure(text=f"⚠ {MENSAGEM_BLOQUEIO}")
             self._definir_acoes_habilitadas(False)
         else:
@@ -417,7 +613,8 @@ class TelaRelatorios(ctk.CTkFrame):
         return dados, funcionario_individual
 
     def _gerar_arquivo(self, exportador) -> Path | None:
-        if self._resultado is None or existem_pendencias_abertas(self._resultado):
+        resultado_filtrado = self._resultado_filtrado()
+        if resultado_filtrado is None or existem_pendencias_abertas(resultado_filtrado):
             messagebox.showwarning("Relatório bloqueado", MENSAGEM_BLOQUEIO)
             return None
 

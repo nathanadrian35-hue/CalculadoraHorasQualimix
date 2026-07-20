@@ -215,7 +215,7 @@ Homologado na Sprint 4.1 contra a planilha real da Qualimix.
 | 🟢 | Retomar Trabalho (fechar/reabrir preserva pendências restantes e justificativas já aplicadas) |
 | 🟢 | Múltiplas competências coexistindo de forma independente |
 | 🟢 | Tela de Relatórios com seletor de competência (geração independente por competência) |
-| 🟢 | Importação de competência já existente pergunta Substituir/Cancelar (nunca duplica) |
+| 🟢 | Importação de competência já existente sincroniza incrementalmente (v2.0 — ver Etapa 14; nunca duplica nem substitui) |
 | 🟢 | Identificação de Funcionário por IDUsuário (identificador principal, diferencia homônimos) |
 | 🟢 | Migração automática just-in-time do IDUsuário em cadastros antigos |
 | 🟢 | Homologado com as duas planilhas reais (Julho/2026 e Abril/2026) |
@@ -250,6 +250,30 @@ Homologado na Sprint 4.1 contra a planilha real da Qualimix.
 
 ---
 
+# ETAPA 14 - VERSÃO 2.0 (COMPETÊNCIA INCREMENTAL, IMPORTAÇÃO SEMANAL E DASHBOARD)
+
+| Status | Item |
+|--------|------|
+| 🟢 | Sincronização incremental por competência (dia a dia: mantém/adiciona/atualiza, nunca remove) |
+| 🟢 | Proteção de dia corrigido manualmente ou com pendência resolvida/justificada |
+| 🟢 | Dia futuro (sem batida, após o último dia com dado do lote) não gera pendência falsa |
+| 🟢 | Histórico de importações por competência (data/hora, usuário, arquivo, registros adicionados/alterados) |
+| 🟢 | Auditoria (usuário do Windows, quando, o quê, valor anterior, valor novo) em correções manuais e Justificativa por Período |
+| 🟢 | Fechar/Reabrir Competência (confirmação extra para reimportar sobre competência fechada) |
+| 🟢 | Selo simplificado de status (🟢 Em andamento / 🟡 Aguardando pendências / 🔴 Fechada) |
+| 🟢 | Relatórios por período (mês completo / intervalo personalizado, com atalhos Hoje/Semana/Quinzena) |
+| 🟢 | Novos filtros de Relatórios (Situação, Pendências, Horas Extras, Banco de Horas) |
+| 🟢 | Bloqueio por pendência restrito ao recorte selecionado (não à competência inteira) |
+| 🟢 | Dashboard in-app (cards + tabelas ordenadas, sem gráficos de imagem) |
+| 🟢 | Aba "Dashboard" no Relatório Excel (indicadores, ranking, distribuição, gráficos nativos openpyxl) |
+| 🟢 | Backup automático antes de qualquer atualização de competência (reaproveita o mecanismo já existente) |
+| 🟢 | "Banco de Horas" como sinônimo do Saldo já existente (sem regra de acúmulo nova) |
+| 🟢 | Convergência testada: 4 importações incrementais = processamento completo de uma vez, com as duas planilhas reais |
+| 🟢 | Regressão completa (filtros padrão da Tela de Relatórios e as 4 abas originais do Excel inalterados) |
+| 🟢 | Executável e instalador v2.0 (`QualiPonto_Setup_v2.0.exe`) |
+
+---
+
 # OBSERVAÇÕES
 
 - A planilha oficial do relógio de ponto nunca será alterada.
@@ -265,8 +289,8 @@ Homologado na Sprint 4.1 contra a planilha real da Qualimix.
 
 Documentação: ██████████ 100%
 
-Desenvolvimento: ██████████ Aproximadamente 98% (falta apenas Exportação em PDF — reservada para versão futura — e testar em outro computador)
+Desenvolvimento: █████████░ v2.0 completa (falta apenas Exportação em PDF — reservada para versão futura — e testar em outro computador)
 
-Testes: █████████░ Homologação funcional completa (planilhas reais) + regressão manual a cada Sprint, sem suíte automatizada persistente (scripts temporários por sessão)
+Testes: █████████░ Homologação funcional completa (planilhas reais, incluindo convergência de 4 importações incrementais) + regressão manual a cada Sprint, sem suíte automatizada persistente (scripts temporários por sessão)
 
-Projeto: ██████████ Aproximadamente 98% — instalador oficial (QualiPonto_Setup_v1.0.exe) gerado e testado (instalação, atalhos, registro, desinstalação)
+Projeto: ██████████ v2.0 completa — executável e instalador (QualiPonto_Setup_v2.0.exe) gerados e testados (instalação limpa, atualização sobre v1.1.1 com preservação de dados e sem entrada duplicada no registro, desinstalação preservando dados)

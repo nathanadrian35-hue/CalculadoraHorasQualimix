@@ -2570,7 +2570,6 @@ Esta versão deverá ser totalmente funcional para utilização diária na empre
 
 ---
 
-# FIM DA ESPECIFICAÇÃO
 # CAPÍTULO 20
 
 # ARQUITETURA DE COMUNICAÇÃO
@@ -2846,17 +2845,14 @@ selecionada — mesmo comportamento do fluxo inteligente já existente
 
 ## 22.6 Importação e Competência Já Existente
 
-Ao importar uma planilha cujo mês/ano já corresponde a uma competência
-existente, o sistema deverá perguntar antes de prosseguir:
-
-"Já existe uma competência importada para [Mês/Ano]. Deseja substituir
-a competência existente? Esta ação não pode ser desfeita."
-
-Cancelar interrompe a importação sem alterar nada. Substituir refaz
-a competência do zero a partir da nova planilha (novo processamento
-completo, Capítulo 6) — a versão anterior é copiada para backup antes
-de ser sobrescrita (mesmo mecanismo de backup automático já usado em
-todo o sistema, Capítulo 13). Nunca existem duas competências para o
+**Alterado na v2.0 — ver Capítulo 23.3.** Até a v1.1.1, importar uma
+planilha cujo mês/ano já correspondia a uma competência existente
+perguntava se deveria **substituir por inteiro** a competência
+(destrutivo). A partir da v2.0, a nova planilha é **sincronizada
+incrementalmente** com a competência já existente — nada é substituído
+por inteiro, e nenhuma pendência já corrigida/justificada é perdida. A
+única confirmação que permanece é para reimportar sobre uma competência
+**Fechada** (Capítulo 23.4). Nunca existem duas competências para o
 mesmo mês/ano ao mesmo tempo.
 
 ---
@@ -2880,5 +2876,259 @@ por este capítulo. Uma competência não é removida do gerenciamento
 (Capítulo 22.3) depois que um relatório é gerado.
 
 ---
+
+# CAPÍTULO 23
+
+# COMPETÊNCIA INCREMENTAL, IMPORTAÇÃO SEMANAL E DASHBOARD (v2.0)
+
+## 23.1 Objetivo
+
+O RH da Qualimix exporta a planilha de ponto **semanalmente**. O
+arquivo sempre tem o layout do mês inteiro (todos os dias do mês
+aparecem), mas só os dias já ocorridos até o momento da exportação têm
+batida preenchida — os dias futuros aparecem em branco.
+
+Até a v1.1.1, reimportar essa planilha sobre um mês já existente
+substituía a competência inteira (Capítulo 22.6, versão anterior),
+descartando qualquer correção manual ou justificativa já aplicada. A
+partir da v2.0, cada nova importação **atualiza** a mesma competência
+incrementalmente: nenhum dado corrigido é perdido, e a competência
+cresce dia a dia até o mês fechar.
+
+---
+
+## 23.2 Sincronização Incremental
+
+Ao reimportar uma planilha cujo mês/ano já corresponde a uma
+competência existente, o sistema:
+
+• Processa a planilha nova por inteiro através do Motor de Cálculo
+(Capítulo 6), exatamente como sempre — nenhuma regra de cálculo muda.
+
+• Compara o resultado novo com a competência já persistida,
+funcionário a funcionário e dia a dia:
+
+  — Funcionário que ainda não existia na competência: adicionado por
+  inteiro.
+
+  — Funcionário sem Turno válido nesta importação (Capítulo 9.2): seus
+  dias já calculados em importações anteriores nunca são tocados — só
+  a pendência de Turno Não Definido é atualizada.
+
+  — Dia que não existia antes: adicionado.
+
+  — Dia protegido (Capítulo 23.3): nunca sobrescrito, mesmo que a
+  planilha traga um valor diferente para aquele dia.
+
+  — Dia com as mesmas batidas (mesmos horários, mesma ordem) e sem
+  nenhuma pendência nova surgindo (Capítulo 23.6): não é tocado.
+
+  — Dia com batidas diferentes e ainda não protegido: substituído pela
+  versão nova já calculada.
+
+• Nenhum funcionário ou dia é removido, mesmo que esteja ausente do
+arquivo mais recente.
+
+• Pendências, resumo mensal e estatísticas da competência são
+recompostos sobre o estado final já mesclado — mesma agregação pura já
+usada pelo Motor de Cálculo, nenhuma fórmula nova.
+
+O usuário só vê uma mensagem informativa ("competência já existe — os
+novos registros serão sincronizados, sem apagar nada do que já foi
+feito"), nunca mais uma pergunta de Substituir/Cancelar destrutiva
+(exceto para competência Fechada, Capítulo 23.4).
+
+---
+
+## 23.3 Proteção de Dia Corrigido
+
+Um dia nunca é sobrescrito por uma nova importação quando o usuário já
+mexeu nele:
+
+• Pelo menos uma batida daquele dia foi digitada manualmente (correção
+de batida, Capítulo 9.4); ou
+
+• A pendência daquele dia já está resolvida (corrigida ou justificada,
+Capítulo 9.5/9.6).
+
+Essa é a garantia central da importação semanal: corrigir um dia na
+Tela de Pendências é definitivo — nenhuma importação futura da mesma
+competência pode desfazer essa correção sem uma ação explícita do
+usuário (edição manual de novo).
+
+---
+
+## 23.4 Fechamento de Competência
+
+Uma competência pode ser marcada como **Fechada** pela Tela
+Competências (Capítulo 22.3), independente do Status detalhado
+(Capítulo 22.4) e do conceito já existente de Arquivar (Capítulo 22.3):
+Fechar/Reabrir e Arquivar são ações independentes uma da outra.
+
+Reimportar uma planilha sobre uma competência Fechada pergunta antes
+de prosseguir: "Esta competência está fechada. Deseja reabri-la para
+sincronizar esta nova importação?" — Cancelar interrompe a importação
+sem alterar nada; confirmar reabre a competência (Fechada → aberta) e
+prossegue com a sincronização incremental normal (Capítulo 23.2).
+
+Um selo simplificado de 3 estados resume a situação de cada
+competência, calculado automaticamente (nunca persistido por si só) e
+exibido junto ao Status detalhado já existente:
+
+• 🟢 **Em andamento** — não fechada, sem pendência em aberto.
+
+• 🟡 **Aguardando pendências** — não fechada, com pelo menos uma
+pendência em aberto.
+
+• 🔴 **Fechada** — fechada manualmente (prevalece sobre os dois
+anteriores).
+
+---
+
+## 23.5 Histórico de Importações e Auditoria
+
+Cada competência guarda um registro de cada importação recebida: data
+e hora, usuário do Windows que executou a importação, nome do arquivo
+original e quantidade de registros no arquivo/adicionados/alterados.
+
+Além disso, um log de auditoria registra eventos de alteração manual —
+quem (usuário do Windows, capturado automaticamente, sem exigir tela
+de login), quando, o quê foi alterado, valor anterior e valor novo —
+para: correção manual de batida, alteração de justificativa, alteração
+de observações (Tela de Pendências, evento por dia alterado) e
+Aplicar Justificativa por Período (Capítulo 9.8, um único evento
+agregado por operação em lote). Fechar/Reabrir uma competência também
+gera um evento de auditoria.
+
+Ambos os registros são consultáveis pelo botão "Histórico" de cada
+card na Tela Competências (Capítulo 22.3).
+
+---
+
+## 23.6 Dia Futuro Sem Pendência Falsa
+
+Como a planilha semanal sempre tem o layout do mês inteiro, os dias
+que ainda não ocorreram aparecem sem nenhuma batida — exatamente como
+um dia com pendência real de "Nenhuma batida registrada" (Capítulo
+9.1). Sem distinguir os dois casos, toda importação semanal geraria
+dezenas de pendências falsas para os dias futuros do mês.
+
+O Motor de Cálculo determina, a cada processamento, o último dia com
+pelo menos uma batida registrada entre todos os funcionários do lote.
+Um dia sem nenhuma batida que seja **posterior** a esse último dia com
+dado é tratado como "ainda não ocorrido": não gera pendência, fica com
+Situação "Sem Registro", neutro para o resumo mensal. Um dia sem
+batida **anterior ou igual** a esse último dia com dado continua
+gerando a pendência de "Nenhuma batida registrada" normalmente — é uma
+ausência real, não um dia futuro.
+
+Se uma nova importação avança o último dia com dado (a semana seguinte
+chegou), um dia antes tratado como futuro pode passar a ser uma
+ausência real — a sincronização incremental (Capítulo 23.2) reconhece
+essa transição e adota a pendência nova, mesmo que as batidas de
+ambas as versões estivessem igualmente vazias.
+
+---
+
+## 23.7 Relatórios por Período
+
+A Tela de Relatórios (Capítulo 12.8) ganha um seletor de período,
+independente do fechamento da competência (Capítulo 23.4):
+
+• **Mês completo** (padrão) — nenhum filtro de data, mesmo
+comportamento de antes da v2.0.
+
+• **Personalizado** — intervalo de datas "De"/"Até", preenchido
+manualmente ou por um dos atalhos: Hoje, Esta Semana (últimos 7 dias)
+e Quinzena (últimos 15 dias) — cada atalho só preenche os campos "De"/
+"Até"; o filtro em si sempre usa esses dois campos.
+
+O bloqueio por pendência em aberto (Capítulo 9.1/11.11) passa a
+considerar apenas o recorte selecionado (período + demais filtros),
+não a competência inteira — um relatório de uma semana sem nenhuma
+pendência em aberto não é bloqueado por uma pendência de outro dia do
+mesmo mês fora do recorte.
+
+---
+
+## 23.8 Novos Filtros de Relatório
+
+Além dos filtros já existentes (Funcionário/Setor/Turno/Cargo/Status,
+Capítulo 12.8), quatro novos filtros, todos combináveis entre si e com
+os já existentes:
+
+• **Situação** — mantém quem tem pelo menos um dia, no período
+considerado, com a Situação escolhida (Normal/Hora Extra/Hora
+Negativa/Pendência/Sem Registro, Capítulo 10).
+
+• **Pendências** — Com pendência / Sem pendência.
+
+• **Horas Extras** — Com horas extras / Sem horas extras.
+
+• **Banco de Horas** — Positivo / Negativo / Zerado (Capítulo 23.11).
+
+---
+
+## 23.9 Dashboard (in-app)
+
+Nova tela, acessível pelo botão "Dashboard" da Tela Inicial (Capítulo
+12.2), com a competência selecionável (mesmo seletor usado na Tela de
+Relatórios) e:
+
+• Cards: Total de Funcionários, Horas Trabalhadas, Horas Extras, Horas
+Negativas, Banco de Horas, Pendências, Dias Processados e Competência.
+
+• Tabelas ordenadas: Horas Extras por Funcionário, Horas Negativas por
+Funcionário, Pendências por Dia, Horas Extras por Dia, Ranking de
+Horas Extras (10 primeiros), Ranking de Atrasos (10 primeiros — contagem
+de dias com Situação "Hora Negativa" por funcionário) e Banco de Horas
+(saldo por funcionário, Capítulo 23.11).
+
+Sem gráficos de imagem — decisão confirmada: tabelas numéricas
+ordenadas, mantendo o instalador leve e sem nenhuma dependência nova.
+
+---
+
+## 23.10 Dashboard no Relatório Excel
+
+O Relatório Geral em Excel (Capítulo 11.4) ganha uma 5ª aba,
+"Dashboard", com o mesmo conjunto de indicadores/ranking/distribuição
+da Tela Dashboard (Capítulo 23.9), mais gráficos nativos do Excel
+(`openpyxl.chart` — nenhuma dependência nova): gráfico de barras para
+Horas Extras por Funcionário, gráfico de barras para Horas Negativas
+por Funcionário e gráfico de pizza para a distribuição do Banco de
+Horas (Positivo/Negativo/Zerado). As 4 abas já existentes (Relatório
+Diário, Resumo Mensal, Pendências, Informações do Processamento)
+permanecem exatamente como eram, em conteúdo e formatação.
+
+---
+
+## 23.11 Banco de Horas
+
+"Banco de Horas" é um **sinônimo** do Saldo já existente
+(`saldo_final_min`, Capítulo 10) — não é um conceito novo nem uma nova
+regra de cálculo. Não há acúmulo entre competências diferentes: o
+Banco de Horas exibido é sempre o saldo da competência selecionada,
+igual ao que já era mostrado como "Saldo" antes da v2.0.
+
+---
+
+## 23.12 Compatibilidade
+
+Nenhuma regra de cálculo (jornadas, tolerâncias, horas extras, horas
+negativas, Capítulos 6 a 10), nenhuma tela existente e nenhum relatório
+já gerado é alterado por este capítulo. Uma competência processada uma
+única vez (fluxo anterior à v2.0, sem reimportação) produz exatamente
+o mesmo resultado de antes — a sincronização incremental só entra em
+ação ao reimportar um mês já existente. Competências e cadastros
+persistidos por instalações v1.x são lidos normalmente: os campos
+novos (`fechada`, `quantidade_importacoes`, `historico_importacoes`,
+`auditoria`) recebem valores padrão vazios na primeira leitura.
+
+---
+
+# FIM DO CAPÍTULO 23
+
+# FIM DA ESPECIFICAÇÃO
 
 # FIM DO CAPÍTULO 22

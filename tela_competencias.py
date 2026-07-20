@@ -27,7 +27,7 @@ import customtkinter as ctk
 
 import competencias
 from config import Config
-from constantes import StatusCompetencia, nome_mes
+from constantes import StatusCompetencia, StatusSimplificado, nome_mes
 from logger import get_logger
 from modelos import Competencia
 
@@ -42,6 +42,12 @@ _CORES_STATUS: dict[StatusCompetencia, tuple[str, str]] = {
     StatusCompetencia.ARQUIVADA: ("gray50", "gray50"),
 }
 
+_CORES_SIMPLIFICADO: dict[StatusSimplificado, tuple[str, str]] = {
+    StatusSimplificado.EM_ANDAMENTO: ("#1e8449", "#2ecc71"),
+    StatusSimplificado.AGUARDANDO_PENDENCIAS: ("#a04000", "#f39c12"),
+    StatusSimplificado.FECHADA: ("#c0392b", "#e74c3c"),
+}
+
 
 # ---------------------------------------------------------------------------
 # Card de uma competência
@@ -49,12 +55,16 @@ _CORES_STATUS: dict[StatusCompetencia, tuple[str, str]] = {
 
 class _CardCompetencia(ctk.CTkFrame):
     """
-    Card de uma competência (mês/ano) persistida: status (badge
-    colorido, mesmo padrão de Ativo/Inativo já usado em
-    tela_setores.py/tela_funcionarios.py), contadores de
-    funcionários/pendências (abertas x resolvidas), indicação de
-    relatório já gerado, e os botões "Abrir" (retomar trabalho) e
-    "Arquivar".
+    Card de uma competência (mês/ano) persistida: status detalhado
+    (badge colorido, mesmo padrão de Ativo/Inativo já usado em
+    tela_setores.py/tela_funcionarios.py) + selo simplificado de 3
+    estados 🟢/🟡/🔴 (Etapa 7, v2.0, `competencias.status_simplificado`),
+    contadores de funcionários/pendências (abertas x resolvidas) e de
+    importações recebidas, indicação de relatório já gerado, e os
+    botões "Abrir" (retomar trabalho), "Fechar"/"Reabrir" (Etapa 7,
+    v2.0 — competência fechada exige confirmação extra para ser
+    alterada por uma nova importação), "Histórico" (Etapas 6/13, v2.0
+    — importações e auditoria) e "Arquivar".
     """
 
     def __init__(self, master, competencia: Competencia) -> None:
@@ -76,17 +86,35 @@ class _CardCompetencia(ctk.CTkFrame):
         ctk.CTkLabel(
             cabecalho, text=competencia.status.value, text_color=cor, width=150,
             font=ctk.CTkFont(weight="bold"), anchor="w",
-        ).grid(row=0, column=1, padx=(10, 10))
+        ).grid(row=0, column=1, padx=(0, 10))
+
+        selo = competencias.status_simplificado(competencia)
+        cor_selo = _CORES_SIMPLIFICADO.get(selo, ("gray50", "gray50"))
+        ctk.CTkLabel(
+            cabecalho, text=selo.value, text_color=cor_selo, width=170,
+            font=ctk.CTkFont(weight="bold"), anchor="w",
+        ).grid(row=0, column=2, padx=(0, 10))
+
+        self._botao_fechar = ctk.CTkButton(
+            cabecalho, text=("Reabrir" if competencia.fechada else "Fechar"),
+            width=90, fg_color="transparent", border_width=1,
+        )
+        self._botao_fechar.grid(row=0, column=3, padx=(0, 10))
+
+        self._botao_historico = ctk.CTkButton(
+            cabecalho, text="Histórico", width=90, fg_color="transparent", border_width=1,
+        )
+        self._botao_historico.grid(row=0, column=4, padx=(0, 10))
 
         self._botao_arquivar = ctk.CTkButton(
             cabecalho, text="Arquivar", width=100, fg_color="transparent", border_width=1,
         )
-        self._botao_arquivar.grid(row=0, column=2, padx=(0, 10))
+        self._botao_arquivar.grid(row=0, column=5, padx=(0, 10))
         if competencia.status == StatusCompetencia.ARQUIVADA:
             self._botao_arquivar.configure(state="disabled")
 
         self._botao_abrir = ctk.CTkButton(cabecalho, text="Abrir", width=100)
-        self._botao_abrir.grid(row=0, column=3)
+        self._botao_abrir.grid(row=0, column=6)
 
         total_pendencias = len(competencia.resultado.pendencias)
         abertas = sum(1 for p in competencia.resultado.pendencias if not p.resolvida)
@@ -94,6 +122,7 @@ class _CardCompetencia(ctk.CTkFrame):
         info = (
             f"Data da importação: {competencia.data_importacao}    "
             f"Funcionários: {len(competencia.resultado.funcionarios_processados)}    "
+            f"Importações: {competencia.quantidade_importacoes}    "
             f"Pendências: {total_pendencias} "
             f"({resolvidas} resolvida(s), {abertas} em aberto)    "
             f"Relatório gerado: {'Sim' if competencia.relatorio_gerado else 'Não'}"
@@ -108,6 +137,12 @@ class _CardCompetencia(ctk.CTkFrame):
 
     def definir_comando_arquivar(self, comando) -> None:
         self._botao_arquivar.configure(command=comando)
+
+    def definir_comando_fechar(self, comando) -> None:
+        self._botao_fechar.configure(command=comando)
+
+    def definir_comando_historico(self, comando) -> None:
+        self._botao_historico.configure(command=comando)
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +218,8 @@ class TelaCompetencias(ctk.CTkFrame):
             card = _CardCompetencia(self._scroll, competencia)
             card.definir_comando_abrir(functools.partial(self._abrir, competencia))
             card.definir_comando_arquivar(functools.partial(self._arquivar, competencia))
+            card.definir_comando_fechar(functools.partial(self._alternar_fechamento, competencia))
+            card.definir_comando_historico(functools.partial(self._abrir_historico, competencia))
             card.pack(fill="x", pady=6)
             self._cards.append(card)
 
@@ -214,3 +251,80 @@ class TelaCompetencias(ctk.CTkFrame):
         self.controlador.definir_status(
             f"{nome_mes(competencia.mes)}/{competencia.ano} arquivada.")
         self._carregar()
+
+    def _alternar_fechamento(self, competencia: Competencia) -> None:
+        """
+        Fecha ou reabre a competência (Etapa 7, v2.0). Fechar exige
+        confirmação porque, a partir daí, uma nova importação para o
+        mesmo mês/ano só é aceita mediante confirmação extra em
+        `tela_principal.py`; reabrir também é confirmado, já que
+        remove essa proteção.
+        """
+        if competencia.fechada:
+            confirmar = messagebox.askyesno(
+                "Reabrir competência",
+                f"Reabrir {nome_mes(competencia.mes)}/{competencia.ano}?\n\n"
+                "A competência voltará a aceitar novas importações e correções "
+                "sem confirmação extra.",
+            )
+            if not confirmar:
+                return
+            competencias.reabrir_competencia(competencia)
+            mensagem = f"{nome_mes(competencia.mes)}/{competencia.ano} reaberta."
+        else:
+            confirmar = messagebox.askyesno(
+                "Fechar competência",
+                f"Fechar {nome_mes(competencia.mes)}/{competencia.ano}?\n\n"
+                "Competências fechadas continuam disponíveis para relatório, "
+                "mas passam a exigir confirmação extra antes de aceitar uma "
+                "nova importação.",
+            )
+            if not confirmar:
+                return
+            competencias.fechar_competencia(competencia)
+            mensagem = f"{nome_mes(competencia.mes)}/{competencia.ano} fechada."
+
+        self.controlador.definir_status(mensagem)
+        self._carregar()
+
+    def _abrir_historico(self, competencia: Competencia) -> None:
+        """
+        Histórico de importações (Etapa 6) e auditoria (Etapa 13) da
+        competência, v2.0 — leitura simples, sem ação nenhuma além de
+        fechar a janela.
+        """
+        janela = ctk.CTkToplevel(self)
+        janela.title(f"Histórico — {nome_mes(competencia.mes)}/{competencia.ano}")
+        janela.geometry("720x480")
+        janela.transient(self.winfo_toplevel())
+
+        texto = ctk.CTkTextbox(janela, font=ctk.CTkFont(family="Consolas", size=12))
+        texto.pack(fill="both", expand=True, padx=15, pady=15)
+
+        linhas = ["IMPORTAÇÕES", "-" * 70]
+        if competencia.historico_importacoes:
+            for registro in competencia.historico_importacoes:
+                linhas.append(
+                    f"{registro.data_hora}  usuário: {registro.usuario}  "
+                    f"arquivo: {registro.arquivo_original}"
+                )
+                linhas.append(
+                    f"    registros no arquivo: {registro.quantidade_registros}    "
+                    f"adicionados: {registro.registros_adicionados}    "
+                    f"alterados: {registro.registros_alterados}"
+                )
+        else:
+            linhas.append("Nenhum registro de importação.")
+
+        linhas += ["", "AUDITORIA", "-" * 70]
+        if competencia.auditoria:
+            for evento in competencia.auditoria:
+                linhas.append(
+                    f"{evento.quando}  usuário: {evento.usuario}  {evento.o_que}: "
+                    f"'{evento.valor_anterior}' → '{evento.valor_novo}'"
+                )
+        else:
+            linhas.append("Nenhum registro de auditoria.")
+
+        texto.insert("1.0", "\n".join(linhas))
+        texto.configure(state="disabled")

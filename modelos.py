@@ -647,6 +647,16 @@ class ContextoCalculo:
     `feriados` é um ponto reservado para uma futura sprint de Feriados
     (Cap. 6.6): sempre vazio nesta versão — nenhuma lógica de feriado
     está implementada ainda, só o lugar na ordem de cálculo.
+
+    `ultimo_dia_com_dados` (Cap. novo, v2.0): a planilha semanal do RH
+    sempre representa o mês inteiro, mas só os dias já ocorridos vêm
+    com batidas — os dias futuros vêm vazios. Quando preenchido (pelo
+    maior `dia.data` com pelo menos 1 batida em toda a competência,
+    calculado uma vez por `processar_todos()`), um dia sem batidas
+    **posterior** a essa data é tratado como "ainda não ocorreu" — não
+    gera a pendência SEM_BATIDAS. `None` (padrão) preserva o
+    comportamento anterior à v2.0 integralmente: todo dia sem batida
+    de uma jornada configurada é pendência, sem exceção.
     """
 
     config: "Config"
@@ -656,6 +666,7 @@ class ContextoCalculo:
     nome_empresa: str = ""
     competencia: tuple[int, int] | None = None  # (mês, ano)
     feriados: frozenset[date] = field(default_factory=frozenset)
+    ultimo_dia_com_dados: date | None = None
 
 
 @dataclass
@@ -705,6 +716,37 @@ class ResultadoProcessamento:
 # ---------------------------------------------------------------------------
 
 @dataclass
+class RegistroImportacao:
+    """
+    Uma entrada do histórico de importações de uma Competência (Cap.
+    novo, v2.0) — uma linha por vez que uma planilha foi importada
+    (primeira vez ou atualização incremental de uma semana seguinte).
+    """
+
+    data_hora: str
+    usuario: str
+    arquivo_original: str
+    quantidade_registros: int
+    registros_adicionados: int
+    registros_alterados: int
+
+
+@dataclass
+class RegistroAuditoria:
+    """
+    Um evento de auditoria (Cap. novo, v2.0): quem alterou, quando,
+    o que, e os valores anterior/novo — sempre em texto simples,
+    pronto para exibição, nunca reprocessado.
+    """
+
+    quando: str
+    usuario: str
+    o_que: str
+    valor_anterior: str
+    valor_novo: str
+
+
+@dataclass
 class Competencia:
     """
     Uma competência (mês/ano) importada e processada, com estado
@@ -713,6 +755,16 @@ class Competencia:
     Relatórios já consomem hoje — nada muda na forma como é lido,
     só passa a vir de `competencias.carregar_competencia()` além de
     vir direto do Motor.
+
+    A partir da v2.0 (Cap. novo), uma competência é atualizada de
+    forma incremental a cada nova importação (semanal, por exemplo),
+    nunca mais substituída por inteiro — `data_importacao` passa a
+    significar "última atualização"; `data_criacao` é o momento da
+    primeira importação, imutável. `fechada`/`data_fechamento`
+    implementam o fechamento (Cap. novo): competência fechada não
+    aceita nova sincronização nem edição de pendência sem confirmação
+    explícita de reabertura. `historico_importacoes` e `auditoria` são
+    séries que só crescem (nunca reescritas retroativamente).
     """
 
     mes: int
@@ -722,6 +774,40 @@ class Competencia:
     arquivo_original: str
     resultado: ResultadoProcessamento
     relatorio_gerado: bool = False
+    data_criacao: str = ""
+    quantidade_importacoes: int = 1
+    fechada: bool = False
+    data_fechamento: str = ""
+    historico_importacoes: list["RegistroImportacao"] = field(default_factory=list)
+    auditoria: list["RegistroAuditoria"] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.data_criacao:
+            self.data_criacao = self.data_importacao
+
+    # -- Contadores derivados (Cap. novo, v2.0) — nunca armazenados, sempre
+    # calculados sobre `resultado`, para nunca ficarem desatualizados. --
+
+    @property
+    def quantidade_funcionarios(self) -> int:
+        return len(self.resultado.funcionarios_processados)
+
+    @property
+    def quantidade_registros(self) -> int:
+        """Total de dias (registros de ponto) entre todos os funcionários."""
+        return sum(len(f.dias) for f in self.resultado.funcionarios_processados)
+
+    @property
+    def quantidade_pendencias(self) -> int:
+        return len(self.resultado.pendencias)
+
+    @property
+    def quantidade_pendencias_abertas(self) -> int:
+        return sum(1 for p in self.resultado.pendencias if not p.resolvida)
+
+    @property
+    def quantidade_pendencias_resolvidas(self) -> int:
+        return self.quantidade_pendencias - self.quantidade_pendencias_abertas
 
 
 # ---------------------------------------------------------------------------

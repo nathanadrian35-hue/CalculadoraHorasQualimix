@@ -47,6 +47,7 @@ class TelaPrincipal(ctk.CTkFrame):
         self.controlador = controlador
         self.config_app = config
         self.caminho_planilha: Path | None = None
+        self._reabrir_apos_calculo: bool = False
 
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -88,10 +89,11 @@ class TelaPrincipal(ctk.CTkFrame):
         corpo.grid(row=1, column=0, sticky="nsew", padx=30, pady=20)
         corpo.grid_columnconfigure(0, weight=1)
         corpo.grid_columnconfigure(1, weight=1)
+        corpo.grid_columnconfigure(2, weight=1)
 
         # --- Painel de informações da planilha ---
         painel = ctk.CTkFrame(corpo)
-        painel.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 20))
+        painel.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 20))
         painel.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(painel, text="Competência:", anchor="w",
@@ -114,6 +116,7 @@ class TelaPrincipal(ctk.CTkFrame):
             ("Funcionários", lambda: self.controlador.mostrar_tela("funcionarios")),
             ("Setores", lambda: self.controlador.mostrar_tela("setores")),
             ("Competências", lambda: self.controlador.mostrar_tela("competencias")),
+            ("Dashboard", lambda: self.controlador.mostrar_tela("dashboard")),
             ("Relatórios", lambda: self.controlador.mostrar_tela("relatorios")),
             ("Configurações", lambda: self.controlador.mostrar_tela("configuracoes")),
             ("Histórico", lambda: self.controlador.mostrar_tela("historico")),
@@ -121,8 +124,8 @@ class TelaPrincipal(ctk.CTkFrame):
         ]
 
         for indice, (texto, comando) in enumerate(botoes):
-            linha = 1 + indice // 2
-            coluna = indice % 2
+            linha = 1 + indice // 3
+            coluna = indice % 3
             ctk.CTkButton(
                 corpo,
                 text=texto,
@@ -193,8 +196,18 @@ class TelaPrincipal(ctk.CTkFrame):
             return
 
         mes, ano = competencia
-        if competencias.existe(mes, ano) and not self._confirmar_substituicao(mes, ano):
-            return
+        self._reabrir_apos_calculo = False
+        if competencias.existe(mes, ano):
+            competencia_atual = competencias.carregar_competencia(mes, ano)
+            if competencia_atual is not None and competencia_atual.fechada:
+                if not self._confirmar_reabertura(mes, ano):
+                    return
+                self._reabrir_apos_calculo = True
+            else:
+                self.definir_status(
+                    f"{nome_mes(mes)}/{ano} já existe — os novos registros serão "
+                    "sincronizados, sem apagar nada do que já foi feito."
+                )
 
         self.rotulo_competencia.configure(text=f"{nome_mes(mes)}/{ano}")
 
@@ -210,23 +223,20 @@ class TelaPrincipal(ctk.CTkFrame):
         else:
             continuar()
 
-    def _confirmar_substituicao(self, mes: int, ano: int) -> bool:
+    def _confirmar_reabertura(self, mes: int, ano: int) -> bool:
         """
-        Pergunta antes de reimportar uma competência já existente
-        (gerenciamento de múltiplas competências): a importação nunca
-        duplica uma competência silenciosamente — sempre pede
-        confirmação explícita antes de sobrescrever o que já foi
-        processado (com backup automático da versão anterior, feito por
-        `competencias.salvar_competencia`).
+        Uma competência Fechada (Cap. novo, v2.0) nunca é atualizada
+        sem confirmação explícita — reimportar sobre ela pergunta se o
+        usuário quer reabri-la primeiro.
         """
-        substituir = messagebox.askyesno(
-            "Competência já existe",
-            f"Já existe uma competência importada para {nome_mes(mes)}/{ano}.\n\n"
-            "Deseja substituir a competência existente? Esta ação não pode ser desfeita.",
+        reabrir = messagebox.askyesno(
+            "Competência fechada",
+            f"{nome_mes(mes)}/{ano} está fechada. Deseja reabri-la para "
+            "sincronizar esta nova importação?",
         )
-        if not substituir:
-            self.definir_status(f"Importação cancelada — {nome_mes(mes)}/{ano} já existe.")
-        return substituir
+        if not reabrir:
+            self.definir_status(f"Importação cancelada — {nome_mes(mes)}/{ano} está fechada.")
+        return reabrir
 
     def _concluir_leitura(
         self,
@@ -256,10 +266,13 @@ class TelaPrincipal(ctk.CTkFrame):
         """
         Motor de Cálculo (Cap. 6): roda depois que o Painel de Revisão é
         concluído, sobre os funcionários do lote já com `.dias`
-        anexados. O resultado é imediatamente persistido como uma
-        Competência (gerenciamento de múltiplas competências) — fechar o
-        sistema a partir daqui nunca perde nada — e a Tela de Pendências
-        (Cap. 9.3) é aberta em seguida.
+        anexados — exatamente como antes, sem nenhuma regra de cálculo
+        alterada. A partir da v2.0, o resultado não substitui mais uma
+        Competência já existente: é sincronizado incrementalmente
+        (`competencias.registrar_importacao`, Cap. novo) dia a dia,
+        preservando pendências já corrigidas/justificadas. Fechar o
+        sistema a partir daqui nunca perde nada — e a Tela de
+        Pendências (Cap. 9.3) é aberta em seguida.
         """
         turnos = [
             turno_de_dict(dados) for dados in self.config_app.configuracoes.get("turnos", [])
@@ -268,22 +281,38 @@ class TelaPrincipal(ctk.CTkFrame):
             funcionarios_processaveis, turnos, self.config_app,
             nome_empresa=self.config_app.nome_empresa, competencia=competencia,
         )
-        self.definir_status(
-            f"Cálculo concluído: {len(funcionarios_processaveis)} funcionário(s), "
-            f"{len(resultado.pendencias)} pendência(s) para revisar."
-        )
 
         mes, ano = competencia
         arquivo_original = self.caminho_planilha.name if self.caminho_planilha else ""
-        competencia_obj = Competencia(
-            mes=mes,
-            ano=ano,
-            status=competencias.avaliar_status(resultado, None),
-            data_importacao=datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-            arquivo_original=arquivo_original,
-            resultado=resultado,
-        )
-        competencias.salvar_competencia(competencia_obj)
+        competencia_existente = competencias.carregar_competencia(mes, ano)
+
+        if competencia_existente is not None:
+            if self._reabrir_apos_calculo:
+                competencias.reabrir_competencia(competencia_existente)
+            resumo_sync = competencias.registrar_importacao(
+                competencia_existente, resultado, arquivo_original)
+            competencia_obj = competencia_existente
+            self.definir_status(
+                f"Sincronizado: {resumo_sync.registros_adicionados} novo(s), "
+                f"{resumo_sync.registros_alterados} alterado(s), "
+                f"{resumo_sync.registros_mantidos} mantido(s) sem tocar — "
+                f"{len(competencia_obj.resultado.pendencias)} pendência(s) no total."
+            )
+        else:
+            competencia_obj = Competencia(
+                mes=mes,
+                ano=ano,
+                status=competencias.avaliar_status(resultado, None),
+                data_importacao=datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                arquivo_original=arquivo_original,
+                resultado=resultado,
+            )
+            competencias.registrar_criacao(competencia_obj)
+            competencias.salvar_competencia(competencia_obj)
+            self.definir_status(
+                f"Cálculo concluído: {len(funcionarios_processaveis)} funcionário(s), "
+                f"{len(resultado.pendencias)} pendência(s) para revisar."
+            )
 
         self.controlador.iniciar_tela_pendencias(competencia_obj)
 

@@ -68,6 +68,7 @@ def processar_todos(
     turnos_por_id = {turno.id: turno for turno in turnos}
     resultado = ResultadoProcessamento(funcionarios_processados=list(funcionarios))
     dias_calculados = 0
+    ultimo_dia_com_dados = _ultimo_dia_com_dados(funcionarios)
 
     for funcionario in funcionarios:
         turno = turnos_por_id.get(funcionario.turno_id) if funcionario.turno_id else None
@@ -92,6 +93,7 @@ def processar_todos(
             nome_funcionario=funcionario.nome_completo,
             nome_empresa=nome_empresa,
             competencia=competencia,
+            ultimo_dia_com_dados=ultimo_dia_com_dados,
         )
         for dia in funcionario.dias:
             recalcular_dia(dia, contexto)
@@ -118,6 +120,26 @@ def processar_todos(
     return resultado
 
 
+def _ultimo_dia_com_dados(funcionarios: list[Funcionario]) -> date | None:
+    """
+    Maior `dia.data` com pelo menos 1 batida entre todos os
+    funcionários (Cap. novo, v2.0): a planilha semanal do RH sempre
+    representa o mês inteiro, mas só os dias já ocorridos vêm
+    preenchidos — isso marca até onde os dados "realmente chegam"
+    nesta importação, para `recalcular_dia()` não gerar pendência
+    SEM_BATIDAS em dias futuros ainda vazios. `None` se nenhum dia de
+    nenhum funcionário tiver batida nenhuma (planilha totalmente vazia
+    — caso degenerado, mantém o comportamento anterior à v2.0).
+    """
+    datas: list[date] = [
+        dia.data
+        for funcionario in funcionarios
+        for dia in funcionario.dias
+        if dia.batidas
+    ]
+    return max(datas) if datas else None
+
+
 # ---------------------------------------------------------------------------
 # Ponto de entrada público: cálculo de um único dia (Cap. 6/10)
 # ---------------------------------------------------------------------------
@@ -132,9 +154,13 @@ def recalcular_dia(dia: DiaTrabalho, contexto: ContextoCalculo) -> None:
        Domingo do Turno, Cap. 4.6/6.4/6.5).
     2. Verifica feriado (Cap. 6.6) — reservado, sem lógica nesta
        versão (`contexto.feriados` sempre vazio).
-    3. Classifica pendência de quantidade de batidas (Cap. 7),
-       considerando se a jornada do dia tem intervalo (Cap. 7.3), ou
-       detecta horário fora de ordem cronológica.
+    3. Se o dia está sem batida e é posterior ao último dia com dados
+       da importação (Cap. novo, v2.0 — planilha semanal representando
+       o mês inteiro, dias futuros vazios): não gera pendência, fica
+       neutro. Caso contrário, classifica pendência de quantidade de
+       batidas (Cap. 7), considerando se a jornada do dia tem
+       intervalo (Cap. 7.3), ou detecta horário fora de ordem
+       cronológica.
     4. Se pendente e **ainda sem Justificativa** (Cap. 9.1): zera o
        resultado do dia e para — a correção da batida (Cap. 9.4) ou
        uma Justificativa (Cap. 9.6) são o único jeito de destravá-lo.
@@ -157,6 +183,25 @@ def recalcular_dia(dia: DiaTrabalho, contexto: ContextoCalculo) -> None:
     quantidade = len(dia.batidas)
     horarios = [batida.horario for batida in dia.batidas]  # ordem original da planilha
     justificativa = dia.pendencia.justificativa if dia.pendencia else ""
+
+    if (
+        quantidade == 0
+        and dia.pendencia is None
+        and contexto.ultimo_dia_com_dados is not None
+        and dia.data > contexto.ultimo_dia_com_dados
+    ):
+        # Dia futuro ainda não ocorrido (Cap. novo, v2.0): a planilha
+        # semanal do RH sempre representa o mês inteiro, mas só os dias
+        # já ocorridos vêm com batidas — os futuros vêm vazios. Ao
+        # contrário de "sem batidas" de um dia já ocorrido (pendência
+        # real), aqui ainda não há nada a cobrar: nenhuma pendência é
+        # criada, o dia fica neutro até a próxima importação trazer os
+        # dados dele.
+        dia.resultado = ResultadoDia(
+            jornada_prevista_min=(jornada.jornada_prevista_minutos() if jornada else None) or 0,
+            situacao=Situacao.SEM_REGISTRO,
+        )
+        return
 
     tipo_pendencia = _classificar_pendencia_quantidade(quantidade, jornada)
     if tipo_pendencia is None and len(horarios) > 1 and not _em_ordem_crescente(horarios):

@@ -32,6 +32,7 @@ from modelos import (
 from relatorio import existem_pendencias_abertas
 from tela_competencias import TelaCompetencias
 from tela_configuracoes import TelaConfiguracoes
+from tela_dashboard import TelaDashboard
 from tela_funcionarios import TelaFuncionarios
 from tela_historico import TelaHistorico
 from tela_pendencias import TelaPendencias
@@ -87,6 +88,7 @@ class App(ctk.CTk):
             ("pendencias", TelaPendencias),
             ("relatorios", TelaRelatorios),
             ("competencias", TelaCompetencias),
+            ("dashboard", TelaDashboard),
             ("historico", TelaHistorico),
             ("sobre", TelaSobre),
         ):

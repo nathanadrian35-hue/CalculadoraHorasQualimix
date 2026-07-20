@@ -72,6 +72,7 @@ tela_setores.py
 tela_pendencias.py
 tela_relatorios.py
 tela_competencias.py
+tela_dashboard.py
 tela_historico.py
 tela_sobre.py
 
@@ -186,14 +187,19 @@ Tela de Relatórios.
 
 ## Relatórios
 
-Tela dedicada ("Relatórios"), acessível pela Tela Inicial, com filtros
-por Funcionário, Setor, Turno, Cargo e Status, resumo superior
+Tela dedicada ("Relatórios"), acessível pela Tela Inicial, com um
+seletor de **período** (Mês completo ou intervalo personalizado, com
+atalhos para Hoje/Esta Semana/Quinzena — v2.0), filtros por
+Funcionário, Setor, Turno, Cargo e Status, e os novos filtros por
+Situação, Pendências, Horas Extras e Banco de Horas (v2.0, todos
+combináveis entre si), resumo superior
 (Funcionários/Horas Extras/Horas Negativas/Pendências) e os botões
 Visualizar, Exportar Excel e Imprimir.
 
-A geração é bloqueada enquanto existir qualquer pendência em aberto.
+A geração é bloqueada enquanto existir qualquer pendência em aberto no
+recorte selecionado (não na competência inteira — v2.0).
 
-Relatório Geral da Competência: um único arquivo Excel com 4 abas:
+Relatório Geral da Competência: um único arquivo Excel com 5 abas:
 
 ### Aba 1
 
@@ -211,6 +217,12 @@ Pendências.
 
 Informações do Processamento (inclui Estatísticas da Competência).
 
+### Aba 5 (v2.0)
+
+Dashboard: indicadores gerais, ranking de horas extras e de horas
+negativas por funcionário, distribuição do banco de horas e gráficos
+nativos do Excel (sem nenhuma dependência nova).
+
 Também é possível gerar um **Relatório Individual por Funcionário**
 (cabeçalho + tabela diária + resumo do funcionário) e o **Resumo
 Geral da Competência** é exibido tanto na tela quanto na Aba 4.
@@ -224,15 +236,24 @@ pronto para impressão.
 
 ## Gerenciamento de Múltiplas Competências
 
-Cada planilha importada cria uma **Competência** (mês/ano), persistida
-em disco imediatamente após o Motor de Cálculo processar o lote —
-funcionários, pendências, justificativas já preenchidas, resumo mensal,
-estatísticas e status. Fechar o sistema a qualquer momento nunca perde
-esse trabalho.
+Cada planilha importada cria (ou **atualiza incrementalmente**, v2.0)
+uma **Competência** (mês/ano), persistida em disco imediatamente após
+o Motor de Cálculo processar o lote — funcionários, pendências,
+justificativas já preenchidas, resumo mensal, estatísticas e status.
+Fechar o sistema a qualquer momento nunca perde esse trabalho.
 
+- **Importação semanal incremental (v2.0):** o RH pode exportar a
+  mesma planilha (com o layout do mês inteiro) toda semana — reimportar
+  um mês já existente nunca substitui nem duplica nada: cada dia é
+  comparado individualmente, dias iguais não são tocados, dias novos
+  são adicionados, dias diferentes são atualizados. Um dia com batida
+  corrigida manualmente ou pendência já resolvida/justificada nunca é
+  sobrescrito por uma nova importação.
 - Tela dedicada ("Competências"), com um card por competência: data da
-  importação, quantidade de funcionários, quantidade de pendências
-  (total e resolvidas), status e se já foi gerado relatório.
+  importação, quantidade de funcionários, quantidade de importações
+  recebidas, quantidade de pendências (total e resolvidas), status
+  detalhado, selo simplificado (🟢 Em andamento / 🟡 Aguardando
+  pendências / 🔴 Fechada) e se já foi gerado relatório.
 - **Retomar trabalho:** o botão "Abrir" leva direto às pendências
   restantes (justificativas já aplicadas preservadas) ou, se não
   houver mais nenhuma pendência em aberto, direto para a Tela de
@@ -240,11 +261,38 @@ esse trabalho.
 - **Múltiplas competências coexistem** de forma totalmente
   independente — a Tela de Relatórios lista todas e gera o relatório
   de qualquer uma sem afetar as demais.
+- **Fechar/Reabrir (v2.0):** uma competência fechada exige confirmação
+  extra antes de aceitar uma nova importação — protege competências já
+  fechadas contra atualização acidental.
 - **Arquivar:** muda o status manualmente; a competência continua
   disponível na Tela de Relatórios (sem ação de Desarquivar nesta
-  versão).
-- Reimportar uma competência já existente pergunta antes de
-  substituir — nunca duplica.
+  versão) — conceito independente de Fechar/Reabrir.
+- **Histórico e Auditoria (v2.0):** botão "Histórico" no card mostra
+  todas as importações recebidas (data/hora, usuário, arquivo,
+  registros adicionados/alterados) e o log de auditoria de correções
+  manuais (quem — usuário do Windows —, quando, o quê, valor anterior e
+  valor novo).
+
+---
+
+## Dashboard (v2.0)
+
+Tela dedicada ("Dashboard"), acessível pela Tela Inicial, com a
+competência selecionável e:
+
+- Cards: Total de Funcionários, Horas Trabalhadas, Horas Extras, Horas
+  Negativas, Banco de Horas, Pendências, Dias Processados e
+  Competência.
+- Tabelas ordenadas: Horas Extras por Funcionário, Horas Negativas por
+  Funcionário, Pendências por Dia, Horas Extras por Dia, Ranking de
+  Horas Extras (Top 10), Ranking de Atrasos (Top 10 — dias com
+  Situação "Hora Negativa") e Banco de Horas (saldo por funcionário).
+
+Sem gráficos de imagem — tabelas numéricas ordenadas, mantendo o
+instalador leve e sem dependências novas. O mesmo conjunto de
+indicadores/rankings/distribuição também está disponível na Aba 5
+("Dashboard") do Relatório Geral em Excel, com gráficos nativos do
+Excel.
 
 ---
 
@@ -365,11 +413,23 @@ cálculo, configuração ou persistência foi alterada. Ver `CHANGELOG.md` para 
 
 ---
 
+# Objetivo da Versão 2.0
+
+Evoluir o sistema para o fluxo real do RH da Qualimix: a planilha é exportada
+**semanalmente**, sempre com o layout do mês inteiro, mas só com os dias já
+ocorridos preenchidos. O QualiPonto passa a **atualizar** a mesma competência
+incrementalmente a cada importação (nunca substituindo nada), com proteção
+automática de correções manuais, histórico de importações, auditoria,
+fechamento de competência, relatórios por período, novos filtros e um
+Dashboard (in-app e no Excel). Nenhuma regra de cálculo, tela ou relatório
+existente foi removida ou alterada — apenas estendida. Ver `CHANGELOG.md`
+para detalhes.
+
+---
+
 # Futuras Versões
 
-- Dashboard
-- Estatísticas
-- Gráficos
+- Estatísticas avançadas / análises comparativas entre competências
 - Banco de dados
 - Integração com relógio de ponto
 - Relatórios PDF

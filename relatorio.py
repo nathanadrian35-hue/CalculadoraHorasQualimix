@@ -17,15 +17,18 @@ atrás, por leitor_ponto.py. Este módulo só escreve arquivos novos.
 
 from __future__ import annotations
 
+import copy
 from collections import Counter
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Protocol
 
+from calculadora import montar_resumo_mensal
 from config import Config, setor_de_dict, turno_de_dict
 from constantes import (
     APP_NOME,
     DESENVOLVEDOR,
+    Situacao,
     StatusFuncionario,
     VERSAO,
     formatar_minutos,
@@ -108,6 +111,118 @@ def filtrar_resultado(
         and (cargo is None or f.cargo == cargo)
         and (status is None or f.status == status)
     ]
+    ids = {f.id for f in funcionarios}
+    return ResultadoProcessamento(
+        funcionarios_processados=funcionarios,
+        pendencias=[p for p in resultado.pendencias if p.id_funcionario in ids],
+        resumos_mensais=[r for r in resultado.resumos_mensais if r.funcionario_id in ids],
+        estatisticas=dict(resultado.estatisticas),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Filtro por período (Cap. novo, v2.0) — um dia, uma semana, quinzena,
+# intervalo personalizado ou o mês completo, sem depender do fechamento
+# da competência (Etapa 8)
+# ---------------------------------------------------------------------------
+
+def filtrar_por_periodo(
+    resultado: ResultadoProcessamento, data_inicio: date, data_fim: date,
+) -> ResultadoProcessamento:
+    """
+    Recorta um `ResultadoProcessamento` para um intervalo de datas
+    (Cap. novo, v2.0). Nenhum valor é recalculado: cada `Funcionario`
+    do resultado filtrado é uma cópia rasa com `.dias` recortado ao
+    intervalo — os objetos originais (e a Competência persistida)
+    nunca são alterados. `resumos_mensais`/`estatisticas` são
+    recompostos sobre o subconjunto, reaproveitando a mesma agregação
+    pura do Motor (`calculadora.montar_resumo_mensal`) — nenhuma
+    fórmula nova.
+    """
+    funcionarios_recortados: list[Funcionario] = []
+    for funcionario in resultado.funcionarios_processados:
+        funcionario_copia = copy.copy(funcionario)
+        funcionario_copia.dias = [
+            dia for dia in funcionario.dias if data_inicio <= dia.data <= data_fim
+        ]
+        funcionarios_recortados.append(funcionario_copia)
+
+    ids = {f.id for f in funcionarios_recortados}
+    pendencias_no_periodo = [
+        p for p in resultado.pendencias
+        if p.id_funcionario in ids and (p.data is None or data_inicio <= p.data <= data_fim)
+    ]
+
+    return ResultadoProcessamento(
+        funcionarios_processados=funcionarios_recortados,
+        pendencias=pendencias_no_periodo,
+        resumos_mensais=[montar_resumo_mensal(f) for f in funcionarios_recortados],
+        estatisticas=dict(resultado.estatisticas),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Filtros adicionais (Cap. novo, v2.0 — Etapa 9): Situação, Pendências,
+# Horas Extras, Banco de Horas (sinônimo de Saldo, Cap. 10.4)
+# ---------------------------------------------------------------------------
+
+def filtrar_por_atributos(
+    resultado: ResultadoProcessamento,
+    situacao: Situacao | None = None,
+    com_pendencia: bool | None = None,
+    com_horas_extras: bool | None = None,
+    banco_horas: str | None = None,
+) -> ResultadoProcessamento:
+    """
+    Filtros por atributo do funcionário (Cap. novo, v2.0), combináveis
+    entre si e com `filtrar_resultado`/`filtrar_por_periodo`: nenhum
+    valor é recalculado, só filtrado sobre o que o Motor/`resumos_mensais`
+    já produziram.
+
+      - `situacao`: mantém quem tem pelo menos 1 dia com essa Situação
+        no período considerado.
+      - `com_pendencia`: True = só quem tem pendência em aberto; False
+        = só quem não tem.
+      - `com_horas_extras`: True = só quem tem horas extras > 0 no
+        total do período.
+      - `banco_horas`: "positivo" / "negativo" / "zerado" — Banco de
+        Horas é o mesmo Saldo já calculado (Cap. 10.4), sem nenhuma
+        regra de acúmulo entre competências.
+    """
+    resumos_por_id = {r.funcionario_id: r for r in resultado.resumos_mensais}
+    pendencias_abertas_por_id: dict[str, int] = {}
+    for pendencia in resultado.pendencias:
+        if not pendencia.resolvida:
+            pendencias_abertas_por_id[pendencia.id_funcionario] = (
+                pendencias_abertas_por_id.get(pendencia.id_funcionario, 0) + 1
+            )
+
+    def combina(funcionario: Funcionario) -> bool:
+        if situacao is not None and not any(
+            dia.resultado.situacao == situacao for dia in funcionario.dias
+        ):
+            return False
+        if com_pendencia is not None:
+            tem_pendencia = pendencias_abertas_por_id.get(funcionario.id, 0) > 0
+            if tem_pendencia != com_pendencia:
+                return False
+        if com_horas_extras is not None:
+            resumo = resumos_por_id.get(funcionario.id)
+            tem_extras = bool(resumo and resumo.horas_extras_min > 0)
+            if tem_extras != com_horas_extras:
+                return False
+        if banco_horas is not None:
+            resumo_saldo = resumos_por_id.get(funcionario.id)
+            saldo = resumo_saldo.saldo_final_min if resumo_saldo else 0
+            if banco_horas == "positivo" and saldo <= 0:
+                return False
+            if banco_horas == "negativo" and saldo >= 0:
+                return False
+            if banco_horas == "zerado" and saldo != 0:
+                return False
+        return True
+
+    funcionarios = [f for f in resultado.funcionarios_processados if combina(f)]
     ids = {f.id for f in funcionarios}
     return ResultadoProcessamento(
         funcionarios_processados=funcionarios,
@@ -586,12 +701,148 @@ def _montar_aba_informacoes(aba, dados: DadosRelatorio) -> None:
     _preparar_impressao(aba, 2, None)
 
 
+def _montar_aba_dashboard(aba, dados: DadosRelatorio) -> None:
+    """
+    Aba "Dashboard" (Etapa 11, v2.0) — indicadores, ranking e
+    distribuição da competência, com gráficos nativos do Excel
+    (`openpyxl.chart.BarChart`/`PieChart` — decisão confirmada com o
+    usuário: sem nenhuma dependência nova, instalador continua leve).
+    Nenhum valor é recalculado aqui: mesma fonte agregada de
+    `dados.resumo_geral`/`dados.resultado.resumos_mensais`/
+    `dados.resultado.pendencias` já usada pelas demais abas e pela
+    Tela Dashboard (Etapa 10) in-app.
+    """
+    aba.title = "Dashboard"
+    _aplicar_cabecalho(aba, dados, "Dashboard")
+
+    resultado = dados.resultado
+    resumo_geral = dados.resumo_geral
+    resumos = resultado.resumos_mensais
+    dias_processados = len({
+        dia.data for funcionario in resultado.funcionarios_processados
+        for dia in funcionario.dias
+    })
+
+    aba.append(("Indicadores Gerais",))
+    linha_titulo_indicadores = aba.max_row
+    linha_inicio_indicadores = aba.max_row + 1
+    aba.append(("Total de Funcionários", resumo_geral.funcionarios_processados))
+    aba.append(("Horas Trabalhadas", formatar_minutos(resumo_geral.horas_trabalhadas_min)))
+    aba.append(("Horas Extras", formatar_minutos(resumo_geral.horas_extras_min)))
+    aba.append(("Horas Negativas", formatar_minutos(resumo_geral.horas_negativas_min)))
+    aba.append(("Banco de Horas (Saldo Geral)", formatar_minutos(resumo_geral.saldo_geral_min)))
+    aba.append(("Pendências", resumo_geral.total_pendencias))
+    aba.append(("Dias Processados", dias_processados))
+    aba.append(("Competência", dados.competencia_texto))
+    linha_fim_indicadores = aba.max_row
+    aba.append(())
+
+    aba.append(("Ranking de Horas Extras por Funcionário",))
+    linha_titulo_ranking_extras = aba.max_row
+    aba.append(("Funcionário", "Horas Extras (min)"))
+    linha_cabecalho_ranking_extras = aba.max_row
+    ranking_extras = sorted(
+        (r for r in resumos if r.horas_extras_min > 0),
+        key=lambda r: r.horas_extras_min, reverse=True,
+    )[:10]
+    for registro in ranking_extras:
+        aba.append((registro.nome, registro.horas_extras_min))
+    linha_fim_ranking_extras = aba.max_row
+    aba.append(())
+
+    aba.append(("Ranking de Horas Negativas por Funcionário",))
+    linha_titulo_ranking_negativas = aba.max_row
+    aba.append(("Funcionário", "Horas Negativas (min)"))
+    linha_cabecalho_ranking_negativas = aba.max_row
+    ranking_negativas = sorted(
+        (r for r in resumos if r.horas_negativas_min > 0),
+        key=lambda r: r.horas_negativas_min, reverse=True,
+    )[:10]
+    for registro in ranking_negativas:
+        aba.append((registro.nome, registro.horas_negativas_min))
+    linha_fim_ranking_negativas = aba.max_row
+    aba.append(())
+
+    aba.append(("Distribuição do Banco de Horas",))
+    linha_titulo_distribuicao = aba.max_row
+    aba.append(("Situação", "Quantidade de Funcionários"))
+    linha_cabecalho_distribuicao = aba.max_row
+    aba.append(("Positivo", sum(1 for r in resumos if r.saldo_final_min > 0)))
+    aba.append(("Negativo", sum(1 for r in resumos if r.saldo_final_min < 0)))
+    aba.append(("Zerado", sum(1 for r in resumos if r.saldo_final_min == 0)))
+    linha_fim_distribuicao = aba.max_row
+
+    _aplicar_rodape(aba)
+
+    from openpyxl.chart import BarChart, PieChart, Reference
+    from openpyxl.styles import Font
+
+    _estilizar_titulo(aba, 2)
+    _estilizar_pares_chave_valor(aba, linha_inicio_indicadores, linha_fim_indicadores)
+    for linha_titulo, linha_cabecalho, linha_fim in (
+        (linha_titulo_ranking_extras, linha_cabecalho_ranking_extras, linha_fim_ranking_extras),
+        (linha_titulo_ranking_negativas, linha_cabecalho_ranking_negativas,
+         linha_fim_ranking_negativas),
+        (linha_titulo_distribuicao, linha_cabecalho_distribuicao, linha_fim_distribuicao),
+    ):
+        aba.cell(row=linha_titulo, column=1).font = Font(bold=True, italic=True, color="1F4E78")
+        _estilizar_tabela(aba, linha_cabecalho, linha_fim, 2)
+    aba.cell(row=linha_titulo_indicadores, column=1).font = Font(
+        bold=True, italic=True, color="1F4E78")
+
+    if linha_fim_ranking_extras > linha_cabecalho_ranking_extras:
+        grafico_extras = BarChart()
+        grafico_extras.title = "Horas Extras por Funcionário (min)"
+        grafico_extras.y_axis.title = "Minutos"
+        grafico_extras.add_data(
+            Reference(
+                aba, min_col=2, min_row=linha_cabecalho_ranking_extras,
+                max_row=linha_fim_ranking_extras),
+            titles_from_data=True,
+        )
+        grafico_extras.set_categories(Reference(
+            aba, min_col=1, min_row=linha_cabecalho_ranking_extras + 1,
+            max_row=linha_fim_ranking_extras))
+        aba.add_chart(grafico_extras, f"E{linha_titulo_indicadores}")
+
+    if linha_fim_ranking_negativas > linha_cabecalho_ranking_negativas:
+        grafico_negativas = BarChart()
+        grafico_negativas.title = "Horas Negativas por Funcionário (min)"
+        grafico_negativas.y_axis.title = "Minutos"
+        grafico_negativas.add_data(
+            Reference(
+                aba, min_col=2, min_row=linha_cabecalho_ranking_negativas,
+                max_row=linha_fim_ranking_negativas),
+            titles_from_data=True,
+        )
+        grafico_negativas.set_categories(Reference(
+            aba, min_col=1, min_row=linha_cabecalho_ranking_negativas + 1,
+            max_row=linha_fim_ranking_negativas))
+        aba.add_chart(grafico_negativas, f"E{linha_titulo_indicadores + 18}")
+
+    grafico_pizza = PieChart()
+    grafico_pizza.title = "Distribuição do Banco de Horas"
+    grafico_pizza.add_data(
+        Reference(
+            aba, min_col=2, min_row=linha_cabecalho_distribuicao,
+            max_row=linha_fim_distribuicao),
+        titles_from_data=True,
+    )
+    grafico_pizza.set_categories(Reference(
+        aba, min_col=1, min_row=linha_cabecalho_distribuicao + 1, max_row=linha_fim_distribuicao))
+    aba.add_chart(grafico_pizza, f"E{linha_titulo_indicadores + 36}")
+
+    _preparar_impressao(aba, 2, None)
+
+
 def gerar_relatorio_excel_geral(dados: DadosRelatorio, caminho: Path) -> Path:
     """
-    Gera o arquivo .xlsx com as 4 abas do Relatório Geral (Cap. 11.4).
-    Nunca toca a planilha original (Cap. 11.1/11.2) — só escreve um
-    arquivo novo. Levanta `RelatorioBloqueadoError` se houver qualquer
-    pendência em aberto (Cap. 9.1/11.11).
+    Gera o arquivo .xlsx com as 5 abas do Relatório Geral (Cap. 11.4 +
+    Etapa 11 v2.0: nova aba "Dashboard" com indicadores, ranking,
+    distribuição e gráficos nativos). Nunca toca a planilha original
+    (Cap. 11.1/11.2) — só escreve um arquivo novo. Levanta
+    `RelatorioBloqueadoError` se houver qualquer pendência em aberto
+    (Cap. 9.1/11.11).
     """
     _garantir_sem_bloqueio(dados.resultado)
     import openpyxl
@@ -601,6 +852,7 @@ def gerar_relatorio_excel_geral(dados: DadosRelatorio, caminho: Path) -> Path:
     _montar_aba_resumo_mensal(livro.create_sheet(), dados)
     _montar_aba_pendencias(livro.create_sheet(), dados)
     _montar_aba_informacoes(livro.create_sheet(), dados)
+    _montar_aba_dashboard(livro.create_sheet(), dados)
 
     caminho.parent.mkdir(parents=True, exist_ok=True)
     livro.save(caminho)
