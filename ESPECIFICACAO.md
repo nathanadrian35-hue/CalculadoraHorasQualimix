@@ -3129,6 +3129,357 @@ novos (`fechada`, `quantidade_importacoes`, `historico_importacoes`,
 
 # FIM DO CAPÍTULO 23
 
-# FIM DA ESPECIFICAÇÃO
+---
 
-# FIM DO CAPÍTULO 22
+# CAPÍTULO 24 — Modernização de Interface (v2.1 Sprint 1)
+
+## 24.1 Objetivo
+
+Padronizar em todas as telas com listagem (Funcionários, Setores,
+Histórico, Competências, Pendências e, a partir do Capítulo 25,
+Absenteísmo) o mesmo conjunto de recursos de navegação e exportação,
+sem duplicar essa lógica em cada tela.
+
+---
+
+## 24.2 Componentes reutilizáveis (`componentes.py`)
+
+`TabelaPadrao` (`ctk.CTkFrame`) concentra, para qualquer lista de
+registros:
+
+• Pesquisa instantânea — insensível a acento, caixa e (de forma
+simples) plural, usando a mesma normalização já usada pelo motor de
+importação (`modelos.normalizar_texto`).
+
+• Ordenação por clique no cabeçalho da coluna, com 3 estados por
+coluna: crescente → decrescente → ordem original (nenhuma seta).
+Clicar em outra coluna reinicia esse ciclo para a coluna nova.
+
+• Paginação configurável (25 / 50 / 100 / Todos), com rodapé mostrando
+a contagem de registros exibidos/total.
+
+Cada tela fornece à `TabelaPadrao` apenas uma função `criar_linha` que
+sabe construir o widget de UMA linha daquela tela específica — o
+componente não impõe layout de linha, só o contrato mínimo de a linha
+saber se vincular a um registro novo (`vincular`) e se mostrar/ocultar
+(`grid`/`grid_remove`). Isso permite que cada tela mantenha o layout de
+linha que já tinha, só ganhando pesquisa/ordenação/paginação de graça.
+
+Por desempenho, as linhas são recicladas: ao trocar de página ou
+filtrar, os widgets já existentes são reaproveitados e revinculados a
+outro registro, em vez de destruídos e recriados — importante em
+listas grandes (ex.: Histórico com muitas competências).
+
+`BotaoExportar` (`ctk.CTkFrame`) — combina um seletor de formato
+(Excel / CSV / PDF) com um botão "Exportar"; ao clicar, gera o arquivo
+com o formato do momento (Excel via `openpyxl`, CSV com separador `;`
+e codificação UTF-8 com BOM para abrir corretamente no Excel em
+português, PDF via `reportlab`) usando exatamente os registros
+visíveis na tabela no momento do clique (respeitando pesquisa e
+ordenação ativas). O arquivo é salvo em
+`Historico/Exportações/<categoria>/`, com sufixo incremental se já
+existir um arquivo com o mesmo nome no mesmo dia (mesmo padrão já
+usado pelo Histórico de relatórios, Capítulo 12).
+
+---
+
+## 24.3 Atalhos de teclado globais
+
+Válidos em qualquer tela do sistema:
+
+• **F5** — atualiza a tela atual (reexecuta o carregamento de dados),
+quando a tela suporta atualização.
+
+• **Ctrl+F** — leva o foco ao campo de pesquisa da tela atual, quando
+existir.
+
+• **Ctrl+P** — aciona a impressão da tela atual, quando a tela
+suportar impressão.
+
+Não há atalho global para Ctrl+N/Ctrl+S/Esc: o alvo desses comandos
+depende de qual diálogo está aberto no momento, o que tornaria o
+atalho ambíguo ou perigoso (ex.: Esc fechando um diálogo de
+confirmação sem querer).
+
+---
+
+## 24.4 Exceção deliberada — Tela de Pendências
+
+A Tela de Pendências (Capítulo 9) não foi migrada para `TabelaPadrao`
+porque cada linha ali é um mini-formulário (campos de batida,
+combobox de Justificativa, observações), não uma linha de exibição
+compacta — o contrato de `TabelaPadrao` não se encaixa bem nesse caso.
+A tela manteve seu próprio pool especializado de linhas (já existente
+desde a Sprint de Justificativa por Período) e ganhou, à parte,
+ordenação (Nome/Data/Tipo, crescente/decrescente), paginação
+(25/50/100/Todos, com o mesmo princípio de reciclagem de widgets),
+exportação (`BotaoExportar`) e impressão — mesma experiência de uso
+das demais telas, sem forçar uma reestruturação que pioraria a tela.
+
+---
+
+## 24.5 Compatibilidade
+
+Nenhuma regra de negócio, cálculo, ou formato de dado persistido foi
+alterada por este capítulo — é puramente uma camada de apresentação
+sobre listas que já existiam. Nenhuma tela perdeu funcionalidade
+anterior.
+
+---
+
+# FIM DO CAPÍTULO 24
+
+---
+
+# CAPÍTULO 25 — Absenteísmo (v2.1 Sprint 2)
+
+## 25.1 Objetivo
+
+Medir e acompanhar o absenteísmo dos funcionários a partir de dados já
+existentes no sistema — sem introduzir nenhuma nova fonte de dado nem
+recalcular o motor de horas.
+
+---
+
+## 25.2 Fonte dos dados — motor de agregação, não de cálculo
+
+O módulo de Absenteísmo (`absenteismo.py`) NUNCA recalcula horas
+trabalhadas, extras ou negativas — ele apenas agrega o que o Motor de
+Cálculo (Capítulo 6) e as Pendências/Justificativas (Capítulo 9) já
+produziram para uma competência.
+
+Um dia só entra como possível ocorrência de absenteísmo se:
+
+1. O dia tem jornada prevista (dias sem jornada prevista, ex.: folga
+   de escala, são ignorados — não é ausência se não havia expectativa
+   de trabalho); e
+
+2. O dia tem uma Pendência com uma Justificativa válida preenchida
+   (Capítulo 9.6).
+
+Dias com pendência SEM justificativa preenchida (ainda não resolvida)
+não entram nem como ocorrência considerada nem como ignorada — ficam
+de fora do índice até serem resolvidos, para não presumir que
+pendência em aberto seja automaticamente falta.
+
+---
+
+## 25.3 Justificativas consideradas no índice (configurável)
+
+Cada Justificativa (Capítulo 9.6) tem uma configuração própria,
+versionada (25.6), indicando se ela conta para o índice de
+absenteísmo (`considerar_no_indice`), além de cor e ícone de exibição.
+
+Três novas Justificativas foram adicionadas para esta sprint —
+**Licença Maternidade**, **Licença Paternidade** e **Feriado** —,
+incluídas também em `JUSTIFICATIVAS_QUE_ELIMINAM_HORA_NEGATIVA`
+(Capítulo 9.7), pela mesma natureza de ausência legalmente amparada
+das justificativas que já estavam nessa lista.
+
+Por padrão, apenas três Justificativas já existentes vêm marcadas como
+consideradas no índice — **Falta**, **Falta Justificada** e **Atestado
+Médico** —, por corresponderem diretamente a ausência do funcionário.
+As demais (incluindo as 3 novas) vêm desmarcadas por padrão; o
+administrador pode ativar outras conforme a realidade da empresa, sem
+que o sistema precise "adivinhar" uma equivalência que a especificação
+não definiu.
+
+---
+
+## 25.4 Método de cálculo (configurável)
+
+O índice de absenteísmo pode ser expresso, à escolha do administrador,
+em:
+
+• **Dias** — quantidade de dias com ocorrência considerada.
+
+• **Horas** — soma de `jornada_prevista_min - horas_trabalhadas_min`
+(nunca negativo) dos dias com ocorrência considerada.
+
+• **Percentual** — dias/horas perdidos sobre o total de dias/horas
+previstos no período, expresso em %.
+
+A mudança do método de cálculo não recalcula índices já apurados
+(25.6) — só afeta cálculos feitos depois da mudança.
+
+---
+
+## 25.5 Memória de cálculo (nunca "caixa-preta")
+
+Todo índice apurado pode ser aberto numa tela de "Memória de Cálculo"
+mostrando, por extenso: quais dias entraram como ocorrência
+considerada (com funcionário, data e Justificativa), quais ocorrências
+existiam mas foram ignoradas (Justificativa presente, mas não marcada
+para considerar no índice) e a fórmula exata aplicada para chegar ao
+número final. Nenhum resultado é apresentado sem que o usuário consiga
+ver de onde ele veio.
+
+---
+
+## 25.6 Configuração versionada
+
+Cada alteração salva na configuração de Absenteísmo (quais
+Justificativas contam, método de cálculo, limiares de cor) incrementa
+um número de versão e registra uma entrada de auditoria (quem, quando,
+o que mudou, valor anterior, valor novo — mesmo mecanismo de auditoria
+do Capítulo 13). Um índice já calculado guarda a versão da configuração
+usada naquele cálculo — mudar a configuração depois NUNCA altera
+retroativamente um índice já apurado; apenas competências recalculadas
+depois da mudança usam a configuração nova.
+
+---
+
+## 25.7 Classificação por cor e alertas
+
+Cada índice apurado é classificado por cor (verde / amarelo / vermelho)
+a partir de dois limiares configuráveis pelo administrador — "Atenção"
+(padrão 2,0) e "Crítico" (padrão 5,0), na mesma unidade do método de
+cálculo escolhido (25.4). A Tela de Absenteísmo gera alertas
+automáticos para funcionários/competências que cruzam esses limiares.
+
+---
+
+## 25.8 Ranking, comparativo e previsão
+
+• **Ranking** — os funcionários com maior índice de absenteísmo numa
+competência, do maior para o menor.
+
+• **Comparativo** — coloca lado a lado os índices de duas
+competências (mesmo funcionário ou visão geral), mostrando a variação.
+
+• **Previsão** — uma estimativa simples do próximo índice, por média
+móvel dos índices já apurados anteriormente — não é um modelo
+estatístico sofisticado, é uma projeção simples e explicável.
+
+---
+
+## 25.9 Simulador
+
+Permite ao usuário testar hipóteses ("e se este funcionário tivesse
+mais N dias de falta?", "e se esta ocorrência específica fosse
+removida?") e ver o índice resultante, **sem gravar nenhuma alteração**
+nos dados reais — o simulador opera sobre uma cópia em memória do
+indicador já calculado e nunca chama `salvar_competencia` nem qualquer
+outra função de persistência.
+
+---
+
+## 25.10 Tela e navegação
+
+A Tela de Absenteísmo (menu principal) reúne dashboard/indicadores/
+ranking/comparativo/alertas num único lugar (não como submenus
+separados, já que são visões da mesma competência selecionada), com
+uma tela própria de Configuração (Justificativas consideradas, método
+de cálculo, limiares). O histórico de configuração fica acessível a
+partir de cada índice já calculado, através da versão de configuração
+que ele guarda (25.6) — não há uma tela de "Histórico" separada, pois
+o vínculo índice→versão já cumpre esse papel sem duplicar informação.
+
+---
+
+## 25.11 Compatibilidade
+
+Absenteísmo é somente leitura sobre dados já existentes — não grava em
+`funcionarios.json`, em `configuracoes.json` nem em nenhuma
+competência. Nenhuma regra de cálculo de horas (Capítulos 6 a 10) foi
+alterada.
+
+---
+
+# FIM DO CAPÍTULO 25
+
+---
+
+# CAPÍTULO 26 — QualiAssist (v2.1 Sprint 3)
+
+## 26.1 Objetivo
+
+Um assistente de ajuda **100% offline**, integrado a todo o sistema,
+para reduzir dependência de suporte externo — sem nunca alterar dados
+do sistema.
+
+---
+
+## 26.2 Botão flutuante e painel
+
+Um botão flutuante fica sempre visível sobre a janela principal,
+independente da tela atual, e abre o Painel do QualiAssist ao ser
+clicado. O painel oferece pesquisa livre, navegação por categoria
+(mesmo agrupamento do menu principal — Importação, Funcionários,
+Jornadas, Competências, Banco de Horas, Horas Extras, Horas Negativas,
+Correções, Absenteísmo, Relatórios, Dashboard, Configurações,
+Exportações, QualiAssist), histórico de consultas recentes e artigos
+favoritados.
+
+---
+
+## 26.3 Base de conhecimento
+
+Os artigos de ajuda ficam numa base própria (`qualiassist_base.json`),
+separada do código-fonte — o conteúdo pode ser editado (26.6) sem
+alterar nenhum arquivo `.py`. Cada artigo tem categoria, título,
+palavras-chave, perguntas relacionadas (para casar frases naturais do
+usuário), corpo da resposta e links para artigos relacionados.
+
+---
+
+## 26.4 Busca tolerante
+
+A pesquisa ignora acento, caixa, plural simples (removendo o "s" final
+de palavras com mais de 3 letras) e reconhece um pequeno conjunto de
+sinônimos do vocabulário do sistema (ex.: "HE" para "Horas Extras").
+Os resultados são ordenados por relevância: presença dos termos no
+título pesa mais do que nas palavras-chave, que pesa mais do que nas
+perguntas relacionadas, que pesa mais do que no corpo da resposta.
+
+---
+
+## 26.5 Ajuda contextual
+
+Ao abrir o painel a partir de uma tela específica, o QualiAssist já
+sugere a categoria correspondente àquela tela automaticamente. Duas
+ações adicionais ficam disponíveis a partir de qualquer tela: "Explicar
+esta Tela" (abre o artigo que descreve a tela atual, se existir) e
+"Explicar este Botão" (mesma ideia, por elemento).
+
+Quando uma mensagem de erro conhecida aparece no sistema, o QualiAssist
+consegue sugerir o artigo relacionado automaticamente, reconhecendo o
+conjunto de palavras-chave da mensagem (não é necessário que a
+mensagem seja idêntica a um texto fixo — a correspondência é por
+conjunto de palavras presentes, tolerando variações de frase).
+
+---
+
+## 26.6 Painel administrativo
+
+Uma tela administrativa permite criar, editar e ativar/inativar artigos
+da base de conhecimento sem editar o JSON manualmente, além de
+exportar/importar a base inteira em JSON (para backup ou transferência
+entre instalações). Toda alteração na base incrementa uma versão e
+registra auditoria, no mesmo padrão do Capítulo 25.6.
+
+---
+
+## 26.7 Escopo desta versão
+
+Ficam fora desta versão, deliberadamente: tooltip contextual por botão
+individual (todos os botões, um a um) e tour guiado de primeiro acesso
+— citados no documento de origem como possibilidades, mas não
+implementados nesta sprint; ver `README.md`, seção "Futuras Versões".
+
+---
+
+## 26.8 Compatibilidade
+
+O QualiAssist é somente leitura sobre os dados operacionais do sistema
+(nunca grava em `funcionarios.json`, competências, ou configurações de
+cálculo) — sua própria base de conhecimento e histórico de consultas
+são os únicos arquivos que ele grava (`qualiassist_base.json`,
+`qualiassist_historico.json`). Nenhuma tela, cálculo ou relatório
+existente foi alterado por este capítulo.
+
+---
+
+# FIM DO CAPÍTULO 26
+
+# FIM DA ESPECIFICAÇÃO

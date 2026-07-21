@@ -20,6 +20,8 @@ Hierarquia:
 
 from __future__ import annotations
 
+import getpass
+import os
 import unicodedata
 import uuid
 from dataclasses import dataclass, field
@@ -31,6 +33,7 @@ from constantes import (
     GRAFIAS_SETOR_PADRAO,
     LIMIAR_ABSENTEISMO_ATENCAO_PADRAO,
     LIMIAR_ABSENTEISMO_CRITICO_PADRAO,
+    CategoriaQualiAssist,
     Justificativa,
     MetodoCalculoAbsenteismo,
     Situacao,
@@ -387,6 +390,20 @@ def normalizar_texto(texto: str) -> str:
     sem_acento = unicodedata.normalize("NFKD", texto)
     sem_acento = "".join(c for c in sem_acento if not unicodedata.combining(c))
     return " ".join(sem_acento.split()).lower()
+
+
+def usuario_atual() -> str:
+    """
+    Usuário do Windows logado (Cap. novo, v2.0/v2.1) — usado por toda
+    auditoria do sistema (Competências, Absenteísmo, QualiAssist) sem
+    exigir uma tela de login própria. Única implementação: antes desta
+    revisão, `competencias.py` e `absenteismo.py` tinham cada um a sua
+    própria cópia idêntica desta função.
+    """
+    try:
+        return os.getlogin()
+    except OSError:
+        return getpass.getuser()
 
 
 def _setores_correspondentes(departamento: str, setores: list[Setor]) -> list[Setor]:
@@ -1046,3 +1063,60 @@ class IndicadorAbsenteismo:
         if self.metodo == MetodoCalculoAbsenteismo.HORAS:
             return float(self.resultado_horas_min)
         return self.resultado_percentual
+
+
+# ---------------------------------------------------------------------------
+# QualiAssist (v2.1 Sprint 3, Doc. 3 Cap. 1-36) — motor em qualiassist.py
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ArtigoQualiAssist:
+    """
+    Um item da base de conhecimento (Cap. 10): título, categoria,
+    palavras-chave/perguntas para a busca tolerante (Cap. 9), a
+    resposta em si e links internos (nomes de tela) para "Ir para".
+    Persistida separada do código (Cap. 10), editável pelo painel
+    administrativo (Cap. 28) sem exigir alteração de código.
+    """
+
+    titulo: str
+    categoria: CategoriaQualiAssist
+    resposta: str
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    palavras_chave: list[str] = field(default_factory=list)
+    perguntas: list[str] = field(default_factory=list)
+    links_internos: list[str] = field(default_factory=list)
+    relacionados: list[str] = field(default_factory=list)  # ids de outros artigos (Cap. 34)
+    atualizado_em: str = ""
+    ativo: bool = True
+
+
+@dataclass
+class BaseQualiAssist:
+    """
+    Base de conhecimento completa (Cap. 10/29) — versionada: toda
+    alteração pelo painel administrativo incrementa `versao` (Cap. 29),
+    sempre reversível (histórico de versões fica no backup automático
+    já usado por `config.escrever_json`, mesmo mecanismo do resto do
+    sistema — Cap. 12 v2.0).
+    """
+
+    artigos: list[ArtigoQualiAssist] = field(default_factory=list)
+    versao: int = 1
+    atualizado_em: str = ""
+
+
+@dataclass
+class RegistroHistoricoQualiAssist:
+    """
+    Uma pergunta já feita ao QualiAssist (Cap. 15/27): quando, em qual
+    tela, qual categoria foi sugerida e qual artigo respondeu (se
+    algum) — permite reutilizar, favoritar e gerar estatísticas
+    simples de uso sem guardar nada sensível.
+    """
+
+    pergunta: str
+    quando: str
+    tela: str = ""
+    artigo_id: str | None = None
+    favorito: bool = False

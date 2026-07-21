@@ -2,6 +2,59 @@
 
 Todas as mudanças notáveis do QualiPonto são documentadas neste arquivo.
 
+## [2.1.0] - 2026-07-20
+
+Modernização da interface, um novo módulo de Absenteísmo e o QualiAssist —
+assistente de ajuda offline integrado a todo o sistema.
+
+### Adicionado
+
+- **Componentes reutilizáveis** (`componentes.py`): `TabelaPadrao` (pesquisa
+  instantânea, ordenação por clique no cabeçalho, paginação 25/50/100/Todos)
+  e `BotaoExportar` — usados agora por Funcionários, Setores, Histórico,
+  Competências, Absenteísmo e pela Administração do QualiAssist.
+- **Exportação universal** (`exportacao.py`): Excel, CSV e PDF (nova
+  dependência `reportlab`, aprovada explicitamente) em qualquer tabela do
+  sistema, mais o botão "Imprimir" já existente em Relatórios estendido às
+  demais telas.
+- **Atalhos de teclado globais**: F5 (Atualizar), Ctrl+F (Pesquisar),
+  Ctrl+P (Imprimir).
+- **Módulo de Absenteísmo** (`absenteismo.py`): índice configurável (Dias/
+  Horas/Percentual), memória de cálculo transparente, ranking, índice
+  geral, classificação por cor (limiares configuráveis), alertas
+  automáticos, comparativo entre competências, previsão simples por média
+  móvel e simulador que nunca altera dados reais. Configuração versionada
+  — cada alteração salva incrementa a versão e registra auditoria; um
+  índice já calculado nunca é recalculado retroativamente. Três novas
+  Justificativas (Licença Maternidade, Licença Paternidade, Feriado).
+- **QualiAssist** (`qualiassist.py`): assistente de ajuda 100% offline,
+  com base de conhecimento própria (22 artigos cobrindo todo o sistema),
+  busca tolerante a acento/caixa/plural/sinônimo, botão flutuante sempre
+  visível, ajuda contextual por tela, "Explicar esta Tela", reconhecimento
+  de mensagens de erro conhecidas, histórico e favoritos, e um painel
+  administrativo para editar a base sem tocar em código.
+
+### Alterado
+
+- `Justificativa` (`constantes.py`) ganhou 3 novos valores, também
+  incluídos em `JUSTIFICATIVAS_QUE_ELIMINAM_HORA_NEGATIVA` (mesma
+  natureza das já existentes).
+- `usuario_atual()` (auditoria) consolidado num único lugar
+  (`modelos.py`) — antes existia uma cópia idêntica em `competencias.py`
+  e outra em `absenteismo.py`.
+- `tela_absenteismo.py` passa a popular o seletor de competências via
+  `competencias.listar_indice()` (leve) em vez de `listar()` (carrega
+  tudo), carregando a competência selecionada sob demanda.
+
+### Compatibilidade
+
+- **Retrocompatível.** Nenhuma regra de cálculo, tela ou relatório
+  existente foi removida ou alterada — tudo que a v2.0 fazia continua
+  fazendo exatamente da mesma forma. Absenteísmo e QualiAssist só leem
+  dados já registrados pelos módulos existentes (Pendências/
+  Justificativas); nenhum dos dois grava em `funcionarios.json`/
+  `configuracoes.json`/competências.
+
 ## [2.0.0] - 2026-07-20
 
 Evolução do sistema para o fluxo real do RH: a planilha é exportada

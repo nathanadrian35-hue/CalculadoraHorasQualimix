@@ -29,6 +29,7 @@ from modelos import (
     SetorNovoEncontrado,
     SugestaoImportacao,
 )
+from qualiassist_ui import BotaoFlutuanteQualiAssist, PainelQualiAssist
 from relatorio import existem_pendencias_abertas
 from tela_absenteismo import TelaAbsenteismo
 from tela_absenteismo_config import TelaAbsenteismoConfig
@@ -39,6 +40,7 @@ from tela_funcionarios import TelaFuncionarios
 from tela_historico import TelaHistorico
 from tela_pendencias import TelaPendencias
 from tela_principal import TelaPrincipal
+from tela_qualiassist_admin import TelaQualiAssistAdmin
 from tela_relatorios import TelaRelatorios
 from tela_setores import TelaSetores
 from tela_sobre import TelaSobre
@@ -94,6 +96,7 @@ class App(ctk.CTk):
             ("absenteismo", TelaAbsenteismo),
             ("absenteismo_config", TelaAbsenteismoConfig),
             ("historico", TelaHistorico),
+            ("qualiassist_admin", TelaQualiAssistAdmin),
             ("sobre", TelaSobre),
         ):
             tela = Classe(self.container, controlador=self, config=config)
@@ -107,7 +110,25 @@ class App(ctk.CTk):
         tela_inicial = "configuracoes" if config.primeira_execucao else "principal"
         self.mostrar_tela(tela_inicial)
         self._configurar_atalhos()
+
+        # QualiAssist (Sprint 3, v2.1): painel único reaproveitado por toda a
+        # sessão + botão flutuante sempre visível (Cap. 5) — nenhum dos dois
+        # é uma "tela" navegável do container principal.
+        self._painel_qualiassist = PainelQualiAssist(self, self)
+        self._botao_qualiassist = BotaoFlutuanteQualiAssist(
+            self, ao_clicar=lambda: self.abrir_qualiassist())
+
         log.info("Interface iniciada.")
+
+    # -- QualiAssist (Sprint 3, v2.1) ------------------------------------------
+
+    def abrir_qualiassist(self, consulta_inicial: str = "") -> None:
+        """
+        Abre o painel do QualiAssist (Cap. 5) — qualquer tela pode
+        chamar isso, opcionalmente com uma pesquisa já pronta (ex.:
+        `qualiassist.sugerir_por_erro()` reconhecendo uma mensagem).
+        """
+        self._painel_qualiassist.abrir(consulta_inicial)
 
     # -- Navegação -----------------------------------------------------------
 

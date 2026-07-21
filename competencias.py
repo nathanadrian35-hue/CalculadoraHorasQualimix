@@ -20,8 +20,6 @@ ainda em gerenciamento.
 
 from __future__ import annotations
 
-import getpass
-import os
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from pathlib import Path
@@ -42,6 +40,7 @@ from modelos import (
     ResultadoDia,
     ResultadoProcessamento,
     ResumoMensalFuncionario,
+    usuario_atual,
 )
 
 log = get_logger()
@@ -258,14 +257,6 @@ def reabrir_competencia(competencia: Competencia, usuario: str | None = None) ->
 # Auditoria (Cap. novo, v2.0) — quem, quando, o quê, valor anterior/novo
 # ---------------------------------------------------------------------------
 
-def _usuario_atual() -> str:
-    """Usuário do Windows logado — sem exigir login próprio no QualiPonto."""
-    try:
-        return os.getlogin()
-    except OSError:
-        return getpass.getuser()
-
-
 def registrar_auditoria(
     competencia: Competencia, o_que: str, valor_anterior: str, valor_novo: str,
     usuario: str | None = None,
@@ -278,7 +269,7 @@ def registrar_auditoria(
     """
     competencia.auditoria.append(RegistroAuditoria(
         quando=datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        usuario=usuario or _usuario_atual(),
+        usuario=usuario or usuario_atual(),
         o_que=o_que,
         valor_anterior=valor_anterior,
         valor_novo=valor_novo,
@@ -460,7 +451,7 @@ def registrar_criacao(competencia: Competencia, usuario: str | None = None) -> N
     primeiro evento de auditoria. Não persiste — quem chama decide
     quando salvar (normalmente logo em seguida, via `salvar_competencia`).
     """
-    usuario_efetivo = usuario or _usuario_atual()
+    usuario_efetivo = usuario or usuario_atual()
     competencia.historico_importacoes.append(RegistroImportacao(
         data_hora=competencia.data_importacao,
         usuario=usuario_efetivo,
@@ -492,7 +483,7 @@ def registrar_importacao(
     de `salvar_competencia()` (Cap. 13.1, já existente), então toda
     sincronização já é protegida por um backup, sem código adicional.
     """
-    usuario_efetivo = usuario or _usuario_atual()
+    usuario_efetivo = usuario or usuario_atual()
     resumo = sincronizar_competencia(competencia_existente, resultado_novo)
 
     agora = datetime.now().strftime("%d/%m/%Y %H:%M:%S")

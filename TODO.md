@@ -274,6 +274,34 @@ Homologado na Sprint 4.1 contra a planilha real da Qualimix.
 
 ---
 
+# ETAPA 15 - VERSÃO 2.1 (MODERNIZAÇÃO DE INTERFACE, ABSENTEÍSMO E QUALIASSIST)
+
+| Status | Item |
+|--------|------|
+| 🟢 | Componentes reutilizáveis `TabelaPadrao`/`BotaoExportar` (pesquisa, ordenação, paginação, exportação) |
+| 🟢 | Exportação universal Excel/CSV/PDF (nova dependência `reportlab`, aprovada) em todas as telas com listagem |
+| 🟢 | Atalhos de teclado globais (F5, Ctrl+F, Ctrl+P) |
+| 🟢 | Migração de Funcionários/Setores/Histórico/Competências para `TabelaPadrao` |
+| 🟢 | Tela de Pendências: ordenação, paginação, exportação e impressão (pool especializado próprio) |
+| 🟢 | Módulo de Absenteísmo: motor de agregação (índice Dias/Horas/Percentual) |
+| 🟢 | Configuração de Absenteísmo versionada (Justificativas consideradas, limiares, nunca recalcula histórico) |
+| 🟢 | Memória de cálculo do Absenteísmo (sempre visível, nunca "caixa-preta") |
+| 🟢 | Ranking, classificação por cor, alertas, comparativo e previsão (Absenteísmo) |
+| 🟢 | Simulador de Absenteísmo (nunca altera dados reais) |
+| 🟢 | 3 novas Justificativas (Licença Maternidade, Licença Paternidade, Feriado) |
+| 🟢 | QualiAssist: motor, base de conhecimento (22 artigos), busca tolerante a acento/plural/sinônimo |
+| 🟢 | QualiAssist: botão flutuante e painel (pesquisa/categorias/histórico/favoritos) |
+| 🟢 | QualiAssist: ajuda contextual por tela, "Explicar esta Tela", reconhecimento de erros conhecidos |
+| 🟢 | QualiAssist: painel administrativo (CRUD de artigos, versionado, exportar/importar JSON) |
+| 🟢 | Revisão cruzada de consistência entre Sprints 1-3 (duplicações eliminadas — `usuario_atual()` consolidado) |
+| 🟢 | Otimização: `tela_absenteismo.py` usa `competencias.listar_indice()` em vez de `listar()` |
+| 🟢 | Homologação integrada (planilha real → cálculo → Absenteísmo → QualiAssist → interface completa) |
+| 🟢 | Documentação atualizada (README/CHANGELOG/ESPECIFICACAO Cap. 24-26/DESENVOLVIMENTO/TODO) |
+| 🟢 | Bump de versão (2.0.0 → 2.1.0) |
+| ⚪ | Executável e instalador v2.1 (`QualiPonto_Setup_v2.1.exe`), com teste de atualização sobre v2.0 |
+
+---
+
 # OBSERVAÇÕES
 
 - A planilha oficial do relógio de ponto nunca será alterada.
@@ -289,8 +317,8 @@ Homologado na Sprint 4.1 contra a planilha real da Qualimix.
 
 Documentação: ██████████ 100%
 
-Desenvolvimento: █████████░ v2.0 completa (falta apenas Exportação em PDF — reservada para versão futura — e testar em outro computador)
+Desenvolvimento: ██████████ v2.1 completa (Modernização de Interface + Absenteísmo + QualiAssist; exportação em PDF deixa de ser pendência — implementada nesta versão)
 
-Testes: █████████░ Homologação funcional completa (planilhas reais, incluindo convergência de 4 importações incrementais) + regressão manual a cada Sprint, sem suíte automatizada persistente (scripts temporários por sessão)
+Testes: █████████░ Homologação funcional completa (planilhas reais + testes integrados dos 3 módulos novos) + regressão manual a cada Sprint, sem suíte automatizada persistente (scripts temporários por sessão)
 
-Projeto: ██████████ v2.0 completa — executável e instalador (QualiPonto_Setup_v2.0.exe) gerados e testados (instalação limpa, atualização sobre v1.1.1 com preservação de dados e sem entrada duplicada no registro, desinstalação preservando dados)
+Projeto: █████████░ v2.1 documentada e homologada — falta gerar/testar o executável e o instalador finais (QualiPonto_Setup_v2.1.exe, incluindo teste de atualização sobre a v2.0)

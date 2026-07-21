@@ -23,8 +23,6 @@ silenciosamente um índice histórico (Cap. 57/67).
 
 from __future__ import annotations
 
-import getpass
-import os
 from dataclasses import replace
 from datetime import datetime
 
@@ -46,6 +44,7 @@ from modelos import (
     IndicadorAbsenteismo,
     OcorrenciaAbsenteismo,
     RegistroAuditoria,
+    usuario_atual,
 )
 
 log = get_logger()
@@ -184,7 +183,7 @@ def salvar_configuracao(
     configuracao.versao += 1
     configuracao.atualizado_em = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     configuracao.auditoria.append(RegistroAuditoria(
-        quando=configuracao.atualizado_em, usuario=usuario or _usuario_atual(),
+        quando=configuracao.atualizado_em, usuario=usuario or usuario_atual(),
         o_que=o_que, valor_anterior=valor_anterior, valor_novo=valor_novo,
     ))
 
@@ -199,14 +198,6 @@ def salvar_configuracao(
     }
     escrever_json(_caminho_config(), dados, com_backup=True)
     log.info("Configuração de Absenteísmo salva (versão %d): %s", configuracao.versao, o_que)
-
-
-def _usuario_atual() -> str:
-    """Usuário do Windows logado — mesmo padrão de auditoria já usado em competencias.py."""
-    try:
-        return os.getlogin()
-    except OSError:
-        return getpass.getuser()
 
 
 # ---------------------------------------------------------------------------

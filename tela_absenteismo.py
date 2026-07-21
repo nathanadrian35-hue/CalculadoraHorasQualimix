@@ -123,8 +123,7 @@ class TelaAbsenteismo(ctk.CTkFrame):
         super().__init__(master, corner_radius=0)
         self.controlador = controlador
         self.config_app = config
-        self._competencias: list[Competencia] = []
-        self._rotulos_competencia: dict[str, Competencia] = {}
+        self._rotulos_competencia: dict[str, tuple[int, int]] = {}
         self._competencia_atual: Competencia | None = None
         self._configuracao: ConfiguracaoAbsenteismo | None = None
         self._indicadores: list[IndicadorAbsenteismo] = []
@@ -249,11 +248,19 @@ class TelaAbsenteismo(ctk.CTkFrame):
     # -- Ciclo de vida ---------------------------------------------------------
 
     def ao_exibir(self) -> None:
-        """Hook padrão (Sprint 1): recarrega competências e recalcula os indicadores."""
+        """
+        Hook padrão (Sprint 1): recarrega competências e recalcula os
+        indicadores. Usa `listar_indice()` (Cap. 78 — Performance:
+        "evitar consultas repetidas"/"carregar sob demanda") para
+        popular os seletores sem ler funcionários/dias/pendências de
+        TODAS as competências — só a que for de fato selecionada é
+        carregada por inteiro, via `_carregar_competencia_do_rotulo`.
+        """
         self._configuracao = absenteismo.carregar_configuracao()
-        self._competencias = competencias.listar()
+        indice = competencias.listar_indice()
         self._rotulos_competencia = {
-            f"{nome_mes(c.mes)}/{c.ano}": c for c in self._competencias
+            f"{nome_mes(item['mes'])}/{item['ano']}": (item["mes"], item["ano"])
+            for item in indice
         }
         rotulos = list(self._rotulos_competencia.keys())
         self._menu_competencia.configure(values=rotulos or ["Nenhuma competência disponível"])
@@ -265,8 +272,14 @@ class TelaAbsenteismo(ctk.CTkFrame):
     def _ao_selecionar_competencia(self, rotulo: str) -> None:
         self._selecionar_competencia(rotulo)
 
+    def _carregar_competencia_do_rotulo(self, rotulo: str) -> Competencia | None:
+        mes_ano = self._rotulos_competencia.get(rotulo)
+        if mes_ano is None:
+            return None
+        return competencias.carregar_competencia(mes_ano[0], mes_ano[1])
+
     def _selecionar_competencia(self, rotulo: str) -> None:
-        self._competencia_atual = self._rotulos_competencia.get(rotulo)
+        self._competencia_atual = self._carregar_competencia_do_rotulo(rotulo)
         if self._competencia_atual is None or self._configuracao is None:
             self._indicadores = []
         else:
@@ -278,7 +291,7 @@ class TelaAbsenteismo(ctk.CTkFrame):
     def _atualizar_comparativo(self) -> None:
         """"Competência atual" × "Comparar com" (Cap. 56/74) — diferença de índice geral."""
         rotulo_b = self._var_competencia_comparar.get()
-        competencia_b = self._rotulos_competencia.get(rotulo_b)
+        competencia_b = self._carregar_competencia_do_rotulo(rotulo_b)
         if competencia_b is None or self._configuracao is None or not self._indicadores:
             self._rotulo_comparativo.configure(text="")
             return

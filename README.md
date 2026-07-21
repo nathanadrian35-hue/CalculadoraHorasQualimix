@@ -26,6 +26,7 @@ A planilha original nunca será alterada.
 - OpenPyXL
 - xlrd
 - Pillow
+- ReportLab (exportação em PDF, v2.1)
 - PyInstaller
 - Git
 - GitHub
@@ -49,10 +50,14 @@ dados/
     setores.json
     versao.json
     competencias/ (uma Competência por mês/ano — gerenciamento de múltiplas competências)
+    absenteismo_config.json (configuração versionada do módulo de Absenteísmo)
+    qualiassist_base.json (base de conhecimento do QualiAssist)
+    qualiassist_historico.json (histórico/favoritos do QualiAssist)
 
 backup/
 
 Historico/
+    Exportações/ (Excel/CSV/PDF genéricos exportados pelas tabelas do sistema)
 
 Logs/
 
@@ -73,6 +78,9 @@ tela_pendencias.py
 tela_relatorios.py
 tela_competencias.py
 tela_dashboard.py
+tela_absenteismo.py
+tela_absenteismo_config.py
+tela_qualiassist_admin.py
 tela_historico.py
 tela_sobre.py
 
@@ -83,6 +91,12 @@ leitor_ponto.py
 calculadora.py
 relatorio.py
 competencias.py
+absenteismo.py
+qualiassist.py
+qualiassist_ui.py
+qualiassist_base_inicial.py
+componentes.py
+exportacao.py
 modelos.py
 constantes.py
 logger.py
@@ -296,6 +310,83 @@ Excel.
 
 ---
 
+## Modernização de Interface (v2.1)
+
+Todas as telas com listagem (Funcionários, Setores, Histórico,
+Competências, Absenteísmo) passam a compartilhar os mesmos componentes
+reutilizáveis:
+
+- **Pesquisa instantânea** (ignora acento/caixa, por substring).
+- **Ordenação por clique no cabeçalho** — 1º clique crescente, 2º
+  decrescente, 3º volta à ordem original.
+- **Paginação configurável** (25/50/100/Todos).
+- **Exportação universal** para Excel, CSV e PDF, sempre respeitando a
+  pesquisa/ordenação/filtro atuais — mais um botão "Imprimir" que gera
+  o Excel e já envia para a impressora padrão.
+- **Atalhos de teclado**: `F5` (Atualizar), `Ctrl+F` (Pesquisar),
+  `Ctrl+P` (Imprimir).
+
+A Tela de Pendências manteve seu próprio pool de linhas otimizado (são
+mini-formulários por pendência, não linhas compactas), só recebendo
+por cima ordenação, paginação configurável, exportação e impressão.
+
+---
+
+## Absenteísmo (v2.1)
+
+Tela dedicada ("Absenteísmo"), com a competência selecionável:
+
+- **Índice configurável** — Dias, Horas ou Percentual, com limiares de
+  alerta (Verde/Amarelo/Vermelho) ajustáveis pelo administrador.
+- **Configuração por Justificativa**: cada uma pode ou não "contar no
+  índice" — Falta, Falta Justificada e Atestado Médico entram
+  marcadas por padrão; todas as demais (incluindo as 3 novas:
+  Licença Maternidade, Licença Paternidade, Feriado) entram
+  desmarcadas, 100% editável em "Absenteísmo → Configurações".
+  Toda alteração salva cria uma nova versão — índices já calculados
+  não são recalculados retroativamente.
+- **Memória de cálculo** — cada índice mostra a fórmula exata usada,
+  nunca uma "caixa-preta".
+- **Ranking, índice geral, alertas automáticos, comparativo** entre
+  competências e uma **previsão simples** (média móvel dos últimos
+  índices, sempre identificada como estimativa).
+- **Simulador** — "e se esse funcionário faltar mais N dias?", sem
+  nunca alterar nenhum dado real.
+- Exportação/Impressão, como em toda tabela do sistema (v2.1).
+
+Usa exclusivamente o que o Motor de Cálculo e as Justificativas
+(Pendências) já produziram — nenhuma hora é recalculada, nenhum dado
+novo é lançado.
+
+---
+
+## QualiAssist (v2.1)
+
+Assistente de ajuda **100% offline**, acessível de qualquer tela pelo
+botão flutuante no canto da janela:
+
+- **Busca tolerante** a acento, maiúsculas/minúsculas, plural/singular
+  e sinônimos comuns (ex.: "HE" encontra "Horas Extras").
+- **Base de conhecimento própria**, com artigos cobrindo todas as
+  áreas do sistema (Importação, Funcionários, Jornadas, Competências,
+  Banco de Horas, Horas Extras, Horas Negativas, Correções,
+  Absenteísmo, Relatórios, Dashboard, Configurações, Exportações).
+- **Ajuda contextual** — já sugere a categoria certa a partir da tela
+  aberta no momento, e o botão "Explicar esta Tela" busca direto o
+  conteúdo daquela tela.
+- **Reconhecimento de mensagens de erro conhecidas**, sugerindo a
+  busca certa automaticamente.
+- **Histórico e Favoritos**, com botões de Copiar, Imprimir e
+  Exportar (PDF) para qualquer resposta.
+- **Painel Administrativo** (ícone ⚙ no cabeçalho do painel): criar,
+  editar e ativar/desativar artigos, e importar/exportar a base
+  inteira em JSON — sem precisar editar código.
+
+Nunca altera, exclui ou recalcula nada no sistema — só lê e explica o
+que já existe.
+
+---
+
 ## Histórico
 
 Salvar automaticamente todos os relatórios organizados por:
@@ -427,12 +518,24 @@ para detalhes.
 
 ---
 
+# Objetivo da Versão 2.1
+
+Modernizar a experiência de uso sem alterar nenhuma regra de negócio
+existente: pesquisa/ordenação/paginação/exportação/impressão padronizadas em
+toda tela com listagem, um novo módulo de **Absenteísmo** (índice
+configurável, memória de cálculo transparente, simulador) e o
+**QualiAssist**, assistente de ajuda 100% offline integrado a todas as
+telas. Nenhuma funcionalidade das versões anteriores foi removida ou
+alterada — apenas estendida. Ver `CHANGELOG.md` para detalhes.
+
+---
+
 # Futuras Versões
 
 - Estatísticas avançadas / análises comparativas entre competências
 - Banco de dados
 - Integração com relógio de ponto
-- Relatórios PDF
+- Tooltips contextuais por botão e tour guiado de primeiro acesso (QualiAssist)
 
 ---
 

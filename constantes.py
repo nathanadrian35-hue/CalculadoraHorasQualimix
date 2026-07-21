@@ -19,7 +19,7 @@ from enum import Enum
 
 APP_NOME: str = "QualiPonto"
 APP_NOME_CURTO: str = "Sistema de Controle de Jornada e Horas Extras"
-VERSAO: str = "2.0.0"
+VERSAO: str = "2.1.0"
 DESENVOLVEDOR: str = "Nathan Adrian"
 
 
@@ -260,3 +260,26 @@ class MetodoCalculoAbsenteismo(str, Enum):
 # administrador; estes são só o valor inicial de uma competência nova.
 LIMIAR_ABSENTEISMO_ATENCAO_PADRAO: float = 2.0
 LIMIAR_ABSENTEISMO_CRITICO_PADRAO: float = 5.0
+
+
+# ---------------------------------------------------------------------------
+# QualiAssist (v2.1 Sprint 3, Doc. 3 Cap. 1-36) — motor em qualiassist.py
+# ---------------------------------------------------------------------------
+
+class CategoriaQualiAssist(str, Enum):
+    """Categorias da base de conhecimento (Cap. 7) — mesmo agrupamento do menu do sistema."""
+
+    IMPORTACAO = "Importação"
+    FUNCIONARIOS = "Funcionários"
+    JORNADAS = "Jornadas"
+    COMPETENCIAS = "Competências"
+    BANCO_DE_HORAS = "Banco de Horas"
+    HORAS_EXTRAS = "Horas Extras"
+    HORAS_NEGATIVAS = "Horas Negativas"
+    CORRECOES = "Correções"
+    ABSENTEISMO = "Absenteísmo"
+    RELATORIOS = "Relatórios"
+    DASHBOARD = "Dashboard"
+    CONFIGURACOES = "Configurações"
+    EXPORTACOES = "Exportações"
+    QUALIASSIST = "QualiAssist"

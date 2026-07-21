@@ -16,10 +16,10 @@
 ; upgrade no lugar, em vez de criar uma segunda entrada em "Programas
 ; Instalados". Só AppVersion/OutputBaseFilename mudam a cada versão.
 ;
-; Gera um único arquivo: QualiPonto_Setup_v2.0.exe
+; Gera um único arquivo: QualiPonto_Setup_v2.1.exe
 
 #define AppName "QualiPonto"
-#define AppVersion "2.0.0"
+#define AppVersion "2.1.0"
 #define AppPublisher "Nathan Adrian"
 #define AppExeName "QualiPonto.exe"
 
@@ -35,7 +35,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=commandline
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=installer_output
-OutputBaseFilename=QualiPonto_Setup_v2.0
+OutputBaseFilename=QualiPonto_Setup_v2.1
 SetupIconFile=assets\icones\app.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 Compression=lzma2

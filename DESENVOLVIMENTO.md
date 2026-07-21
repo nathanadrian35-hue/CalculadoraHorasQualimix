@@ -559,6 +559,134 @@ idempotente, Justificativa por Período em lote). Análise estática
 
 ---
 
+# SPRINT 9.1 (v2.1) — Modernização de Interface
+
+## Objetivo
+
+Padronizar pesquisa instantânea, ordenação por clique no cabeçalho,
+paginação e exportação universal (Excel/CSV/PDF) em todas as telas com
+listagem, mais atalhos de teclado globais — sem alterar nenhuma regra
+de negócio ou formato de dado persistido.
+
+### Arquivos
+
+- componentes.py (novo — `TabelaPadrao`, `BotaoExportar`,
+  `ColunaOrdenavel`, Protocol `LinhaTabela`)
+- exportacao.py (novo — `exportar_excel_simples`, `exportar_csv`,
+  `exportar_pdf_simples`, `caminho_exportacao`)
+- requirements.txt (nova dependência `reportlab`, aprovada
+  explicitamente antes de ser adicionada)
+- tela_funcionarios.py, tela_setores.py, tela_historico.py,
+  tela_competencias.py (migração para `TabelaPadrao`/`BotaoExportar`)
+- tela_pendencias.py (ordenação, paginação, exportação e impressão
+  mantendo o pool especializado próprio — Cap. 24.4)
+- interface.py (`_configurar_atalhos`: F5/Ctrl+F/Ctrl+P)
+
+### Funcionalidades
+
+- Pesquisa instantânea insensível a acento/caixa/plural em todas as
+  listagens
+- Ordenação por clique no cabeçalho (3 estados: crescente/
+  decrescente/original)
+- Paginação 25/50/100/Todos, com reciclagem de widgets
+- Exportação universal (Excel/CSV/PDF) e impressão em qualquer tabela
+- Atalhos de teclado globais: F5, Ctrl+F, Ctrl+P
+
+### Critério de conclusão
+
+Todas as telas com listagem oferecem pesquisa, ordenação, paginação e
+exportação de forma padronizada, sem regressão em nenhuma
+funcionalidade anterior. Análise estática (pyflakes/pycodestyle/mypy)
+limpa em todos os arquivos.
+
+---
+
+# SPRINT 9.2 (v2.1) — Absenteísmo
+
+## Objetivo
+
+Medir e acompanhar o absenteísmo agregando dados já produzidos pelo
+Motor de Cálculo e pelas Pendências/Justificativas — sem recalcular
+horas e sem inventar regras de negócio não presentes na especificação.
+
+### Arquivos
+
+- absenteismo.py (novo — motor completo: configuração versionada,
+  cálculo de indicadores, memória de cálculo, ranking, comparativo,
+  previsão, simulador)
+- tela_absenteismo.py (novo — dashboard/indicadores/ranking/alertas/
+  comparativo)
+- tela_absenteismo_config.py (novo — Justificativas consideradas,
+  método de cálculo, limiares de cor)
+- constantes.py (3 novas Justificativas — Licença Maternidade,
+  Licença Paternidade, Feriado —, `MetodoCalculoAbsenteismo`, limiares
+  padrão)
+- modelos.py (`ConfiguracaoOcorrencia`, `ConfiguracaoAbsenteismo`,
+  `OcorrenciaAbsenteismo`, `IndicadorAbsenteismo`, `usuario_atual()`
+  consolidado)
+- tela_principal.py (botão Absenteísmo)
+- interface.py (registro das telas)
+
+### Funcionalidades
+
+- Índice configurável (Dias/Horas/Percentual)
+- Configuração de quais Justificativas contam no índice, versionada
+  (nunca recalcula histórico retroativamente)
+- Memória de cálculo sempre visível (nunca "caixa-preta")
+- Ranking, classificação por cor, alertas automáticos, comparativo
+  entre competências, previsão por média móvel
+- Simulador que nunca altera dados reais
+
+### Critério de conclusão
+
+Índices calculados batem manualmente contra pendências/justificativas
+de competências reais; mudança de configuração comprovadamente não
+altera índices já apurados; simulador comprovadamente não grava nada.
+Análise estática limpa em todos os arquivos.
+
+---
+
+# SPRINT 9.3 (v2.1) — QualiAssist
+
+## Objetivo
+
+Assistente de ajuda 100% offline integrado a todo o sistema, com base
+de conhecimento própria e editável, sem nunca alterar dados
+operacionais do sistema.
+
+### Arquivos
+
+- qualiassist.py (novo — motor: persistência versionada, busca
+  tolerante, ajuda contextual por tela, reconhecimento de erros
+  conhecidos)
+- qualiassist_base_inicial.py (novo — 22 artigos cobrindo as 14
+  categorias)
+- qualiassist_ui.py (novo — `PainelQualiAssist`, `BotaoFlutuanteQualiAssist`)
+- tela_qualiassist_admin.py (novo — CRUD de artigos, exportar/importar
+  base JSON)
+- interface.py (botão flutuante e painel instanciados uma única vez;
+  `abrir_qualiassist()`)
+
+### Funcionalidades
+
+- Botão flutuante sempre visível e painel com pesquisa/categorias/
+  histórico/favoritos
+- Busca tolerante a acento/caixa/plural/sinônimo
+- Ajuda contextual por tela, "Explicar esta Tela"
+- Reconhecimento de mensagens de erro conhecidas (por conjunto de
+  palavras, não substring exata)
+- Painel administrativo com versionamento e auditoria
+
+### Critério de conclusão
+
+Painel/botão flutuante funcionam em todas as telas sem interferir em
+nenhuma funcionalidade existente; busca encontra os artigos esperados
+para consultas de teste (incluindo variações de acento/plural/
+sinônimo); reconhecimento de erro testado contra mensagens reais do
+sistema. Análise estática limpa em todos os arquivos.
+
+---
+
 # REGRAS
 
 - Seguir obrigatoriamente o README.md.
