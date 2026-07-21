@@ -975,13 +975,13 @@ class TelaFuncionarios(ctk.CTkFrame):
             self._linhas_revisao.append(linha)
 
         self._ocultar_formulario()
-        self._scroll_funcionarios.grid_remove()
+        self._tabela.grid_remove()
         self._frame_revisao.grid(row=4, column=0, sticky="nsew", padx=30, pady=15)
 
     def _cancelar_revisao(self) -> None:
         """Fecha o Painel de Revisão sem persistir nada."""
         self._frame_revisao.grid_remove()
-        self._scroll_funcionarios.grid(row=4, column=0, sticky="nsew", padx=30, pady=15)
+        self._tabela.grid(row=4, column=0, sticky="nsew", padx=30, pady=15)
 
     def _concluir_revisao(self) -> None:
         """
@@ -1085,7 +1085,7 @@ class TelaFuncionarios(ctk.CTkFrame):
 
         self.config_app.salvar_funcionarios()
         self._frame_revisao.grid_remove()
-        self._scroll_funcionarios.grid(row=4, column=0, sticky="nsew", padx=30, pady=15)
+        self._tabela.grid(row=4, column=0, sticky="nsew", padx=30, pady=15)
         self._carregar_lista()
 
         ao_concluir_calculo = self._ao_concluir_calculo
@@ -1159,7 +1159,7 @@ class TelaFuncionarios(ctk.CTkFrame):
         self._ao_concluir_setores_novos = ao_concluir
 
         self._ocultar_formulario()
-        self._scroll_funcionarios.grid_remove()
+        self._tabela.grid_remove()
         self._frame_setores_novos.grid(row=4, column=0, sticky="nsew", padx=30, pady=15)
 
     def _confirmar_setores_novos(self) -> None:

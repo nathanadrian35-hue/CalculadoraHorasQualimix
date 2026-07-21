@@ -2,6 +2,34 @@
 
 Todas as mudanças notáveis do QualiPonto são documentadas neste arquivo.
 
+## [2.1.1] - 2026-07-20
+
+### Corrigido
+
+- **Regressão crítica: as telas de listagem (Funcionários, Setores e
+  outras) ficavam vazias e o botão "Processar" não populava nenhum
+  dado**, embora a planilha e a competência fossem identificadas
+  corretamente. **Causa raiz:** a migração da Tela de Funcionários
+  para o componente `TabelaPadrao` (v2.1 Sprint 1) substituiu a antiga
+  lista (`self._scroll_funcionarios`) pela nova tabela
+  (`self._tabela`), mas quatro pontos do código que escondem/mostram
+  essa lista ao abrir os painéis de "Setores Novos" e "Revisão de
+  Importação" continuaram referenciando o nome antigo, que nunca mais
+  existia — `iniciar_revisao_setores_novos()` e
+  `iniciar_revisao_importacao()` lançavam
+  `AttributeError: 'TelaFuncionarios' object has no attribute
+  '_scroll_funcionarios'` assim que o usuário clicava em "Processar".
+  Como essa exceção não era capturada em nenhum ponto do fluxo de
+  importação, o Tkinter apenas a descartava silenciosamente — o
+  usuário via a tela parada, sem nenhum aviso, e nenhum funcionário
+  era cadastrado nem calculado.
+  **Correção:** as quatro referências passam a apontar para
+  `self._tabela`, restaurando exatamente o comportamento anterior à
+  migração (a tabela é escondida ao abrir os painéis de revisão e
+  volta a aparecer ao cancelar ou concluir). Nenhuma outra tela
+  apresentava o mesmo problema (verificado em todas as telas migradas
+  para `TabelaPadrao` na v2.1 Sprint 1).
+
 ## [2.1.0] - 2026-07-20
 
 Modernização da interface, um novo módulo de Absenteísmo e o QualiAssist —
