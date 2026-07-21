@@ -30,6 +30,8 @@ from modelos import (
     SugestaoImportacao,
 )
 from relatorio import existem_pendencias_abertas
+from tela_absenteismo import TelaAbsenteismo
+from tela_absenteismo_config import TelaAbsenteismoConfig
 from tela_competencias import TelaCompetencias
 from tela_configuracoes import TelaConfiguracoes
 from tela_dashboard import TelaDashboard
@@ -89,6 +91,8 @@ class App(ctk.CTk):
             ("relatorios", TelaRelatorios),
             ("competencias", TelaCompetencias),
             ("dashboard", TelaDashboard),
+            ("absenteismo", TelaAbsenteismo),
+            ("absenteismo_config", TelaAbsenteismoConfig),
             ("historico", TelaHistorico),
             ("sobre", TelaSobre),
         ):
@@ -96,10 +100,13 @@ class App(ctk.CTk):
             tela.grid(row=0, column=0, sticky="nsew")
             self._telas[nome] = tela
 
+        self._tela_atual: str = ""
+
         # Primeira execução: abre o Wizard de configuração inicial (Cap. 4)
         # em vez da tela principal. Nas próximas execuções, abre direto.
         tela_inicial = "configuracoes" if config.primeira_execucao else "principal"
         self.mostrar_tela(tela_inicial)
+        self._configurar_atalhos()
         log.info("Interface iniciada.")
 
     # -- Navegação -----------------------------------------------------------
@@ -116,6 +123,53 @@ class App(ctk.CTk):
             tela.ao_exibir()
 
         tela.tkraise()
+        self._tela_atual = nome
+
+    # -- Atalhos de teclado globais (Sprint 1, v2.1) --------------------------
+
+    def _configurar_atalhos(self) -> None:
+        """
+        Cada tecla despacha para a tela atualmente visível através de
+        hooks opcionais (`hasattr`) — uma tela que não implementa um
+        atalho específico simplesmente o ignora, sem erro. `Ctrl+N`/
+        `Ctrl+S`/`Esc` ficaram de fora desta primeira leva: o alvo
+        "certo" depende de qual formulário/diálogo está aberto no
+        momento (ex.: Esc fechando um Toplevel vs. voltando de tela),
+        e um despacho genérico arriscaria fechar a coisa errada.
+        """
+        self.bind_all("<F5>", lambda evento: self._atalho_atualizar())
+        self.bind_all("<Control-f>", lambda evento: self._atalho_pesquisar())
+        self.bind_all("<Control-F>", lambda evento: self._atalho_pesquisar())
+        self.bind_all("<Control-p>", lambda evento: self._atalho_imprimir())
+        self.bind_all("<Control-P>", lambda evento: self._atalho_imprimir())
+
+    def _tela_ativa(self) -> ctk.CTkFrame | None:
+        return self._telas.get(self._tela_atual)
+
+    def _atalho_atualizar(self) -> None:
+        """F5 — Atualizar: reaproveita o mesmo hook `ao_exibir()` já usado ao trocar de tela."""
+        tela = self._tela_ativa()
+        if tela is not None and hasattr(tela, "ao_exibir"):
+            tela.ao_exibir()
+
+    def _atalho_pesquisar(self) -> None:
+        """Ctrl+F — Pesquisar: foca o campo de busca da tela atual, se houver."""
+        tela = self._tela_ativa()
+        if tela is None:
+            return
+        tabela = getattr(tela, "_tabela", None)
+        if tabela is not None and hasattr(tabela, "_entry_pesquisa"):
+            tabela._entry_pesquisa.focus_set()
+            return
+        entry_busca = getattr(tela, "_entry_busca", None)
+        if entry_busca is not None:
+            entry_busca.focus_set()
+
+    def _atalho_imprimir(self) -> None:
+        """Ctrl+P — Imprimir: dispara o mesmo botão "Imprimir" da tela atual, se houver."""
+        tela = self._tela_ativa()
+        if tela is not None and hasattr(tela, "_imprimir"):
+            tela._imprimir()
 
     def definir_status(self, texto: str) -> None:
         """Atualiza a barra de status (exibida na tela principal)."""

@@ -29,6 +29,7 @@ espírito do Painel de Revisão (Cap. 5.4).
 
 from __future__ import annotations
 
+import os
 import tkinter as tk
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -39,8 +40,10 @@ import customtkinter as ctk
 
 import competencias
 from calculadora import recalcular_dia
+from componentes import BotaoExportar
 from config import Config, turno_de_dict
 from constantes import Justificativa, StatusFuncionario, TipoPendencia, formatar_minutos
+from exportacao import caminho_exportacao, exportar_excel_simples
 from logger import get_logger
 from modelos import (
     Batida,
@@ -58,6 +61,12 @@ log = get_logger()
 _SEM_JUSTIFICATIVA = "— Nenhuma —"
 _ROTULOS_HORARIO = ("Entrada", "Saída Almoço", "Retorno Almoço", "Saída")
 _TODOS_OS_TIPOS = "Todos os tipos"
+_TAMANHOS_PAGINA = ("25", "50", "100", "Todos")
+_OPCOES_ORDENACAO: dict[str, Callable[[Pendencia], str | date]] = {
+    "Funcionário": lambda p: p.nome_funcionario.lower(),
+    "Data": lambda p: p.data or date.min,
+    "Tipo": lambda p: p.tipo.value,
+}
 
 # Pendências cuja correção envolve digitar batidas (Cap. 9.4) — todas
 # exceto a de Turno, que se resolve na tela Funcionários (Cap. 5.13).
@@ -522,12 +531,22 @@ class _DialogoJustificativaPeriodo(ctk.CTkToplevel):
 class TelaPendencias(ctk.CTkFrame):
     """
     Tela de Pendências (Cap. 9.3) — visualizar, corrigir, justificar e
-    recalcular. Escalável (Sprint 4.1): pool fixo de `_TAMANHO_PAGINA`
-    linhas reaproveitadas, paginação, pesquisa por nome e filtro por
-    tipo — nunca cria/destrói widgets a cada troca de página.
+    recalcular. Escalável (Sprint 4.1, ampliado na v2.1): pool de
+    linhas reaproveitadas (cresce sob demanda conforme o tamanho de
+    página escolhido, nunca encolhe), paginação, pesquisa por nome,
+    filtro por tipo e ordenação — nunca cria/destrói widgets a cada
+    troca de página.
+
+    `_LinhaPendencia` é um mini-formulário por pendência (campos de
+    batida, justificativa, observações), não uma linha compacta — por
+    isso esta tela usa seu próprio pool especializado em vez de
+    `componentes.TabelaPadrao` (pensada para linhas compactas do tipo
+    "exibir + botões"); o cabeçalho clicável de `TabelaPadrao` não
+    faz sentido sem colunas fixas, então a ordenação aqui é por um
+    seletor "Ordenar por" equivalente.
     """
 
-    _TAMANHO_PAGINA = 25
+    _TAMANHO_PAGINA_PADRAO = 25
 
     def __init__(self, master, controlador, config: Config) -> None:
         super().__init__(master, corner_radius=0)
@@ -537,6 +556,7 @@ class TelaPendencias(ctk.CTkFrame):
         self._resultado: ResultadoProcessamento | None = None
         self._funcionarios_por_id: dict[str, Funcionario] = {}
         self._pagina_atual = 0
+        self._ordem_decrescente = False
         self._pool: list[_LinhaPendencia] = []
 
         self.grid_rowconfigure(2, weight=1)
@@ -566,7 +586,7 @@ class TelaPendencias(ctk.CTkFrame):
         ).grid(row=0, column=2, padx=15, pady=15)
 
     def _montar_barra_ferramentas(self) -> None:
-        """Pesquisa por nome + filtro por tipo (Sprint 4.1) — reduzem a lista antes de paginar."""
+        """Pesquisa, filtro por tipo, ordenação e tamanho de página — reduzem/organizam a lista."""
         barra = ctk.CTkFrame(self, fg_color="transparent")
         barra.grid(row=1, column=0, sticky="ew", padx=30, pady=(15, 0))
         barra.grid_columnconfigure(0, weight=1)
@@ -578,20 +598,83 @@ class TelaPendencias(ctk.CTkFrame):
         valores_tipo = [_TODOS_OS_TIPOS] + [tipo.value for tipo in TipoPendencia]
         self._var_filtro_tipo = tk.StringVar(value=_TODOS_OS_TIPOS)
         ctk.CTkOptionMenu(
-            barra, values=valores_tipo, variable=self._var_filtro_tipo, width=220,
+            barra, values=valores_tipo, variable=self._var_filtro_tipo, width=200,
             command=lambda valor: self._ao_alterar_filtro(),
         ).grid(row=0, column=1, padx=(0, 10))
+
+        self._var_ordenar_por = tk.StringVar(value="Funcionário")
+        ctk.CTkOptionMenu(
+            barra, values=list(_OPCOES_ORDENACAO), variable=self._var_ordenar_por, width=140,
+            command=lambda valor: self._ao_alterar_filtro(),
+        ).grid(row=0, column=2, padx=(0, 5))
+        self._botao_ordem = ctk.CTkButton(
+            barra, text="▲", width=32, fg_color="transparent", border_width=1,
+            command=self._alternar_ordem,
+        )
+        self._botao_ordem.grid(row=0, column=3, padx=(0, 10))
+
+        ctk.CTkLabel(barra, text="Por página").grid(row=0, column=4, padx=(0, 5))
+        self._var_tamanho_pagina = tk.StringVar(value=str(self._TAMANHO_PAGINA_PADRAO))
+        ctk.CTkOptionMenu(
+            barra, values=list(_TAMANHOS_PAGINA), variable=self._var_tamanho_pagina, width=90,
+            command=lambda valor: self._ao_alterar_filtro(),
+        ).grid(row=0, column=5, padx=(0, 10))
 
         ctk.CTkButton(
             barra, text="Aplicar Justificativa por Período", width=230,
             command=self._abrir_dialogo_justificativa_periodo,
-        ).grid(row=0, column=2)
+        ).grid(row=0, column=6, padx=(0, 10))
+
+        ctk.CTkButton(
+            barra, text="Imprimir", width=90, fg_color="transparent", border_width=1,
+            command=self._imprimir,
+        ).grid(row=0, column=7, padx=(0, 10))
+
+        BotaoExportar(
+            barra, titulo="Pendências", colunas=["Funcionário", "Data", "Tipo", "Descrição"],
+            obter_registros=lambda: self._pendencias_filtradas(),
+            montar_linha=lambda p: (
+                p.nome_funcionario, p.data.strftime("%d/%m/%Y") if p.data else "—",
+                p.tipo.value, p.descricao),
+            caminho_sugerido=lambda extensao: caminho_exportacao(
+                self.config_app, "Pendencias", "Pendencias", extensao),
+        ).grid(row=0, column=8)
+
+    def _alternar_ordem(self) -> None:
+        self._ordem_decrescente = not self._ordem_decrescente
+        self._botao_ordem.configure(text="▼" if self._ordem_decrescente else "▲")
+        self._ao_alterar_filtro()
+
+    def _imprimir(self) -> None:
+        """Impressão universal (Sprint 1): gera o Excel da lista e envia à impressora padrão."""
+        registros = self._pendencias_filtradas()
+        if not registros:
+            messagebox.showinfo("Imprimir", "Não há pendências para imprimir.")
+            return
+        caminho = caminho_exportacao(self.config_app, "Pendencias", "Pendencias", "xlsx")
+        exportar_excel_simples(
+            caminho, "Pendências", ["Funcionário", "Data", "Tipo", "Descrição"],
+            [(p.nome_funcionario, p.data.strftime("%d/%m/%Y") if p.data else "—",
+              p.tipo.value, p.descricao) for p in registros],
+        )
+        try:
+            os.startfile(str(caminho), "print")  # type: ignore[attr-defined]
+            self.controlador.definir_status(f"Enviado para impressão: {caminho.name}")
+        except OSError as erro:
+            log.error("Falha ao imprimir pendências: %s", erro)
+            messagebox.showerror(
+                "Não foi possível imprimir",
+                f"Não foi possível enviar para impressão automaticamente. "
+                f"O arquivo foi gerado em:\n{caminho}",
+            )
 
     def _montar_lista(self) -> None:
         """
-        Cria o pool fixo de `_TAMANHO_PAGINA` linhas UMA ÚNICA VEZ
-        (Sprint 4.1) — `_atualizar_lista()` só troca o conteúdo de cada
-        uma via `vincular()`, nunca cria/destrói widgets depois disso.
+        Cria o pool de linhas (Sprint 4.1) — `_atualizar_lista()` só
+        troca o conteúdo de cada uma via `vincular()`, nunca cria/
+        destrói widgets depois disso; o pool cresce sob demanda
+        (`_garantir_pool`) conforme o tamanho de página escolhido,
+        nunca encolhe.
         """
         self._scroll_pendencias = ctk.CTkScrollableFrame(self, fg_color="transparent")
         self._scroll_pendencias.grid(row=2, column=0, sticky="nsew", padx=30, pady=15)
@@ -599,14 +682,19 @@ class TelaPendencias(ctk.CTkFrame):
         self._rotulo_vazio = ctk.CTkLabel(
             self._scroll_pendencias, text="", text_color=("gray60", "gray60"))
 
-        self._pool = [
-            _LinhaPendencia(
+        self._garantir_pool(self._TAMANHO_PAGINA_PADRAO)
+
+    def _garantir_pool(self, quantidade: int) -> None:
+        while len(self._pool) < quantidade:
+            self._pool.append(_LinhaPendencia(
                 self._scroll_pendencias,
                 ao_salvar=self._salvar_correcao,
                 ao_ir_funcionarios=self._ir_para_funcionarios,
-            )
-            for _ in range(self._TAMANHO_PAGINA)
-        ]
+            ))
+
+    def _tamanho_pagina(self) -> int | None:
+        valor = self._var_tamanho_pagina.get()
+        return None if valor == "Todos" else int(valor)
 
     def _montar_rodape_paginacao(self) -> None:
         rodape = ctk.CTkFrame(self, fg_color="transparent")
@@ -658,7 +746,7 @@ class TelaPendencias(ctk.CTkFrame):
     # -- Pesquisa, filtro e paginação (Sprint 4.1) ---------------------------
 
     def _pendencias_filtradas(self) -> list[Pendencia]:
-        """Aplica pesquisa por nome + filtro por tipo sobre as pendências ainda em aberto."""
+        """Aplica pesquisa, filtro por tipo e ordenação sobre as pendências ainda em aberto."""
         if self._resultado is None:
             return []
 
@@ -670,6 +758,9 @@ class TelaPendencias(ctk.CTkFrame):
             pendencias = [p for p in pendencias if termo in p.nome_funcionario.lower()]
         if tipo_selecionado != _TODOS_OS_TIPOS:
             pendencias = [p for p in pendencias if p.tipo.value == tipo_selecionado]
+
+        chave = _OPCOES_ORDENACAO[self._var_ordenar_por.get()]
+        pendencias.sort(key=chave, reverse=self._ordem_decrescente)
         return pendencias
 
     def _ao_alterar_filtro(self) -> None:
@@ -701,12 +792,18 @@ class TelaPendencias(ctk.CTkFrame):
         total_abertas = sum(1 for p in self._resultado.pendencias if not p.resolvida)
         filtradas = self._pendencias_filtradas()
         total_filtradas = len(filtradas)
+        tamanho_pagina = self._tamanho_pagina()
 
-        total_paginas = max(1, -(-total_filtradas // self._TAMANHO_PAGINA))  # ceil
-        self._pagina_atual = max(0, min(self._pagina_atual, total_paginas - 1))
+        if tamanho_pagina is None:
+            total_paginas = 1
+            pagina = filtradas
+        else:
+            total_paginas = max(1, -(-total_filtradas // tamanho_pagina))  # ceil
+            self._pagina_atual = max(0, min(self._pagina_atual, total_paginas - 1))
+            inicio = self._pagina_atual * tamanho_pagina
+            pagina = filtradas[inicio:inicio + tamanho_pagina]
 
-        inicio = self._pagina_atual * self._TAMANHO_PAGINA
-        pagina = filtradas[inicio:inicio + self._TAMANHO_PAGINA]
+        self._garantir_pool(len(pagina))
 
         if total_filtradas == total_abertas:
             self._rotulo_contador.configure(text=f"{total_abertas} pendência(s) em aberto")

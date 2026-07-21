@@ -17,15 +17,17 @@ nova é criada aqui.
 
 from __future__ import annotations
 
-import functools
+import os
 import tkinter as tk
 from tkinter import colorchooser, messagebox
 from typing import Callable
 
 import customtkinter as ctk
 
+from componentes import BotaoExportar, ColunaOrdenavel, TabelaPadrao
 from config import Config, setor_de_dict, setor_para_dict
 from constantes import StatusFuncionario
+from exportacao import caminho_exportacao, exportar_excel_simples
 from logger import get_logger
 from modelos import Setor, nome_duplicado
 
@@ -33,72 +35,91 @@ log = get_logger()
 
 
 # ---------------------------------------------------------------------------
-# Linha de um único setor (componente da lista)
+# Linha de um único setor (componente reaproveitável — Sprint 1, v2.1)
 # ---------------------------------------------------------------------------
 
 class _LinhaSetor(ctk.CTkFrame):
     """
-    Uma linha da lista de setores: nome, indicador de cor (se houver) e
-    status, com os botões Editar/Ativar-Inativar/Excluir. Não persiste
-    nada — apenas exibe o Setor recebido e delega as ações via os
-    comandos atribuídos externamente pelo container (mesmo padrão de
-    `_PainelTurno.definir_comando_remover`, em tela_configuracoes.py).
+    Uma linha reaproveitável do pool de `TabelaPadrao` (Sprint 1,
+    v2.1): todos os widgets são criados uma única vez em `__init__` —
+    `vincular()` só troca qual Setor esta linha exibe, sem recriar
+    nada (mesmo padrão de `_LinhaPendencia`, tela_pendencias.py).
     """
 
-    def __init__(self, master, setor: Setor) -> None:
+    def __init__(
+        self,
+        master,
+        ao_editar: Callable[[Setor], None],
+        ao_alternar_status: Callable[[Setor], None],
+        ao_excluir: Callable[[Setor], None],
+    ) -> None:
         super().__init__(master, corner_radius=8, border_width=1)
-        self.setor = setor
+        self.setor: Setor | None = None
+        self._ao_editar = ao_editar
+        self._ao_alternar_status = ao_alternar_status
+        self._ao_excluir = ao_excluir
 
         self.grid_columnconfigure(1, weight=1)
 
-        if setor.cor:
-            quadro_cor = ctk.CTkFrame(self, width=18, height=18, corner_radius=4)
-            self._aplicar_cor(quadro_cor, setor.cor)
-            quadro_cor.grid(row=0, column=0, padx=(12, 0), pady=12)
+        self._quadro_cor = ctk.CTkFrame(self, width=18, height=18, corner_radius=4)
+        self._quadro_cor.grid(row=0, column=0, padx=(12, 0), pady=12)
 
-        ctk.CTkLabel(
-            self, text=setor.nome, font=ctk.CTkFont(size=14, weight="bold"), anchor="w",
-        ).grid(row=0, column=1, sticky="w", padx=12, pady=12)
+        self._rotulo_nome = ctk.CTkLabel(
+            self, font=ctk.CTkFont(size=14, weight="bold"), anchor="w")
+        self._rotulo_nome.grid(row=0, column=1, sticky="w", padx=12, pady=12)
 
-        ativo = setor.status == StatusFuncionario.ATIVO
-        ctk.CTkLabel(
-            self, text=setor.status.value,
-            text_color=("#1e8449", "#2ecc71") if ativo else ("gray50", "gray50"),
-            font=ctk.CTkFont(size=12), width=70,
-        ).grid(row=0, column=2, padx=10)
+        self._rotulo_status = ctk.CTkLabel(self, font=ctk.CTkFont(size=12), width=70)
+        self._rotulo_status.grid(row=0, column=2, padx=10)
 
-        self._botao_editar = ctk.CTkButton(self, text="Editar", width=80)
+        self._botao_editar = ctk.CTkButton(
+            self, text="Editar", width=80, command=self._clicar_editar)
         self._botao_editar.grid(row=0, column=3, padx=(0, 8), pady=12)
 
         self._botao_alternar = ctk.CTkButton(
-            self, text="Inativar" if ativo else "Ativar", width=80,
-            fg_color="transparent", border_width=1,
+            self, text="", width=80, fg_color="transparent", border_width=1,
+            command=self._clicar_alternar_status,
         )
         self._botao_alternar.grid(row=0, column=4, padx=(0, 8), pady=12)
 
         self._botao_excluir = ctk.CTkButton(
             self, text="Excluir", width=80, fg_color="#c0392b", hover_color="#992d22",
+            command=self._clicar_excluir,
         )
         self._botao_excluir.grid(row=0, column=5, padx=(0, 12), pady=12)
 
-    def _aplicar_cor(self, quadro: ctk.CTkFrame, cor: str) -> None:
+    def _clicar_editar(self) -> None:
+        if self.setor is not None:
+            self._ao_editar(self.setor)
+
+    def _clicar_alternar_status(self) -> None:
+        if self.setor is not None:
+            self._ao_alternar_status(self.setor)
+
+    def _clicar_excluir(self) -> None:
+        if self.setor is not None:
+            self._ao_excluir(self.setor)
+
+    def vincular(self, setor: Setor) -> None:
+        self.setor = setor
+        if setor.cor:
+            self._aplicar_cor(setor.cor)
+        else:
+            self._quadro_cor.configure(fg_color="transparent")
+        self._rotulo_nome.configure(text=setor.nome)
+
+        ativo = setor.status == StatusFuncionario.ATIVO
+        self._rotulo_status.configure(
+            text=setor.status.value,
+            text_color=("#1e8449", "#2ecc71") if ativo else ("gray50", "gray50"),
+        )
+        self._botao_alternar.configure(text="Inativar" if ativo else "Ativar")
+
+    def _aplicar_cor(self, cor: str) -> None:
         """Aplica a cor informada ao indicador visual, ignorando valores inválidos."""
         try:
-            quadro.configure(fg_color=cor)
+            self._quadro_cor.configure(fg_color=cor)
         except tk.TclError:
-            quadro.configure(fg_color="gray40")
-
-    def definir_comando_editar(self, comando: Callable[[], None]) -> None:
-        """Define a ação executada ao clicar em "Editar"."""
-        self._botao_editar.configure(command=comando)
-
-    def definir_comando_alternar_status(self, comando: Callable[[], None]) -> None:
-        """Define a ação executada ao clicar em "Ativar"/"Inativar"."""
-        self._botao_alternar.configure(command=comando)
-
-    def definir_comando_excluir(self, comando: Callable[[], None]) -> None:
-        """Define a ação executada ao clicar em "Excluir"."""
-        self._botao_excluir.configure(command=comando)
+            self._quadro_cor.configure(fg_color="gray40")
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +134,6 @@ class TelaSetores(ctk.CTkFrame):
 
         self.controlador = controlador
         self.config_app = config
-        self._linhas_setor: list[_LinhaSetor] = []
         self._setor_em_edicao_id: str | None = None
         self._cor_selecionada: str = ""
 
@@ -145,11 +165,27 @@ class TelaSetores(ctk.CTkFrame):
         ).grid(row=0, column=1, sticky="w", padx=10)
 
     def _montar_botao_adicionar(self) -> None:
+        barra = ctk.CTkFrame(self, fg_color="transparent")
+        barra.grid(row=1, column=0, sticky="ew", padx=30, pady=(15, 0))
+
         ctk.CTkButton(
-            self, text="+ Adicionar Setor", height=44,
+            barra, text="+ Adicionar Setor", height=44,
             font=ctk.CTkFont(size=14, weight="bold"), corner_radius=10,
             command=lambda: self._mostrar_formulario(),
-        ).grid(row=1, column=0, sticky="w", padx=30, pady=(15, 0))
+        ).pack(side="left")
+
+        ctk.CTkButton(
+            barra, text="Imprimir", width=100, fg_color="transparent", border_width=1,
+            command=self._imprimir,
+        ).pack(side="right")
+
+        BotaoExportar(
+            barra, titulo="Setores", colunas=["Nome", "Cor", "Status"],
+            obter_registros=lambda: self._tabela.registros_filtrados(),
+            montar_linha=lambda s: (s.nome, s.cor or "—", s.status.value),
+            caminho_sugerido=lambda extensao: caminho_exportacao(
+                self.config_app, "Setores", "Setores", extensao),
+        ).pack(side="right", padx=(0, 10))
 
     # -- Formulário (reaproveitado para adicionar e editar) --------------------
 
@@ -323,48 +359,37 @@ class TelaSetores(ctk.CTkFrame):
     # -- Lista de setores --------------------------------------------------------
 
     def _montar_lista(self) -> None:
-        self._scroll_setores = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self._scroll_setores.grid(row=3, column=0, sticky="nsew", padx=30, pady=15)
-
-        self._rotulo_lista_vazia = ctk.CTkLabel(
-            self._scroll_setores, text="Nenhum setor cadastrado ainda.",
-            text_color=("gray60", "gray60"),
+        self._tabela = TabelaPadrao(
+            self,
+            criar_linha=lambda m: _LinhaSetor(
+                m, ao_editar=self._mostrar_formulario,
+                ao_alternar_status=self._alternar_status,
+                ao_excluir=self._excluir_setor,
+            ),
+            colunas=[
+                ColunaOrdenavel("Nome", lambda s: s.nome),
+                ColunaOrdenavel("Status", lambda s: s.status.value),
+            ],
+            campos_pesquisa=[lambda s: s.nome],
+            texto_vazio="Nenhum setor cadastrado ainda.",
         )
+        self._tabela.grid(row=3, column=0, sticky="nsew", padx=30, pady=15)
 
     def ao_exibir(self) -> None:
         """Recarrega a lista sempre que a tela é exibida (Sprint 1: hook padrão)."""
         self._carregar_lista()
 
     def _carregar_lista(self) -> None:
-        """(Re)constrói a lista de setores a partir de config.setores."""
-        for linha in self._linhas_setor:
-            linha.destroy()
-        self._linhas_setor = []
-        self._rotulo_lista_vazia.pack_forget()
-
-        setores_dict = self.config_app.setores.get("setores", [])
-        if not setores_dict:
-            self._rotulo_lista_vazia.pack(pady=20)
-            return
-
-        for dados in setores_dict:
-            setor = setor_de_dict(dados)
-            linha = _LinhaSetor(self._scroll_setores, setor)
-            linha.definir_comando_editar(functools.partial(self._mostrar_formulario, setor))
-            linha.definir_comando_alternar_status(
-                functools.partial(self._alternar_status, setor.id))
-            linha.definir_comando_excluir(
-                functools.partial(self._excluir_setor, setor.id, setor.nome))
-            linha.pack(fill="x", pady=5)
-            self._linhas_setor.append(linha)
+        """(Re)carrega a lista de setores a partir de config.setores."""
+        setores = [setor_de_dict(dados) for dados in self.config_app.setores.get("setores", [])]
+        self._tabela.definir_registros(setores)
 
     # -- Ações -----------------------------------------------------------------
 
-    def _alternar_status(self, setor_id: str) -> None:
+    def _alternar_status(self, setor: Setor) -> None:
         """Ativa/Inativa o setor imediatamente (Cap. 21.3)."""
         for dados in self.config_app.setores.get("setores", []):
-            if dados.get("id") == setor_id:
-                setor = setor_de_dict(dados)
+            if dados.get("id") == setor.id:
                 novo_status = (
                     StatusFuncionario.INATIVO if setor.status == StatusFuncionario.ATIVO
                     else StatusFuncionario.ATIVO
@@ -375,31 +400,53 @@ class TelaSetores(ctk.CTkFrame):
         self.config_app.salvar_setores()
         self._carregar_lista()
 
-    def _excluir_setor(self, setor_id: str, nome: str) -> None:
+    def _excluir_setor(self, setor: Setor) -> None:
         """
         Exclui um setor, com confirmação obrigatória (Cap. 21.3) e
         verificação de vínculo com funcionários (Cap. 21.5).
         """
-        if self._setor_possui_vinculo(setor_id):
+        if self._setor_possui_vinculo(setor.id):
             messagebox.showerror(
                 "Não é possível excluir",
-                f'O setor "{nome}" possui funcionários vinculados e não pode ser excluído.',
+                f'O setor "{setor.nome}" possui funcionários vinculados e não pode ser excluído.',
             )
             return
 
         confirmar = messagebox.askyesno(
             "Confirmar exclusão",
-            f'Excluir o setor "{nome}"? Esta ação não pode ser desfeita.',
+            f'Excluir o setor "{setor.nome}"? Esta ação não pode ser desfeita.',
         )
         if not confirmar:
             return
 
         setores = self.config_app.setores.get("setores", [])
         self.config_app.setores["setores"] = [
-            dados for dados in setores if dados.get("id") != setor_id
+            dados for dados in setores if dados.get("id") != setor.id
         ]
         self.config_app.salvar_setores()
         self._carregar_lista()
+
+    def _imprimir(self) -> None:
+        """Impressão universal (Sprint 1): gera o Excel da lista e envia à impressora padrão."""
+        registros = self._tabela.registros_filtrados()
+        if not registros:
+            messagebox.showinfo("Imprimir", "Não há registros para imprimir.")
+            return
+        caminho = caminho_exportacao(self.config_app, "Setores", "Setores", "xlsx")
+        exportar_excel_simples(
+            caminho, "Setores", ["Nome", "Cor", "Status"],
+            [(s.nome, s.cor or "—", s.status.value) for s in registros],
+        )
+        try:
+            os.startfile(str(caminho), "print")  # type: ignore[attr-defined]
+            self.controlador.definir_status(f"Enviado para impressão: {caminho.name}")
+        except OSError as erro:
+            log.error("Falha ao imprimir setores: %s", erro)
+            messagebox.showerror(
+                "Não foi possível imprimir",
+                f"Não foi possível enviar para impressão automaticamente. "
+                f"O arquivo foi gerado em:\n{caminho}",
+            )
 
     def _setor_possui_vinculo(self, setor_id: str) -> bool:
         """Verifica se existe algum funcionário vinculado a este setor (Cap. 21.5)."""

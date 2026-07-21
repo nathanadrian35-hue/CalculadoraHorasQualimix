@@ -25,7 +25,7 @@ o mesmo padrão de leitura/escrita/backup automático das demais telas.
 
 from __future__ import annotations
 
-import functools
+import os
 import tkinter as tk
 from datetime import datetime
 from tkinter import messagebox
@@ -33,8 +33,10 @@ from typing import Callable
 
 import customtkinter as ctk
 
+from componentes import BotaoExportar, ColunaOrdenavel, TabelaPadrao
 from config import Config, funcionario_de_dict, funcionario_para_dict, setor_para_dict
 from constantes import SituacaoSugestao, StatusFuncionario
+from exportacao import caminho_exportacao, exportar_excel_simples
 from logger import get_logger
 from modelos import (
     Funcionario,
@@ -66,17 +68,30 @@ def _horario_texto(horario) -> str:
 
 class _LinhaFuncionario(ctk.CTkFrame):
     """
-    Uma linha da tabela de funcionários: checkbox de seleção, Nome,
-    Cargo, Setor, Turno (nomes resolvidos apenas para exibição — o
-    vínculo interno continua por ID, Cap. 5.13/21.4), Status, e os
-    botões Editar/Ativar-Inativar/Excluir.
+    Uma linha reaproveitável do pool de `TabelaPadrao` (Sprint 1,
+    v2.1): checkbox de seleção, Nome, Cargo, Setor, Turno (nomes
+    resolvidos apenas para exibição — o vínculo interno continua por
+    ID, Cap. 5.13/21.4), Status, e os botões
+    Editar/Ativar-Inativar/Excluir. `vincular()` só troca qual
+    funcionário esta linha exibe, sem recriar nada.
     """
 
     def __init__(
-        self, master, funcionario: Funcionario, nome_turno: str, nome_setor: str,
+        self, master,
+        nome_turno_de: Callable[[str], str],
+        nome_setor_de: Callable[[str], str],
+        esta_selecionado: Callable[[str], bool],
+        ao_alternar_selecao: Callable[[str, bool], None],
+        ao_editar: Callable[[Funcionario], None],
+        ao_alternar_status: Callable[[Funcionario], None],
+        ao_excluir: Callable[[Funcionario], None],
     ) -> None:
         super().__init__(master, corner_radius=8, border_width=1)
-        self.funcionario = funcionario
+        self.funcionario: Funcionario | None = None
+        self._nome_turno_de = nome_turno_de
+        self._nome_setor_de = nome_setor_de
+        self._esta_selecionado = esta_selecionado
+        self._ao_alternar_selecao = ao_alternar_selecao
 
         self.grid_columnconfigure(1, weight=2)
         self.grid_columnconfigure(2, weight=1)
@@ -86,55 +101,63 @@ class _LinhaFuncionario(ctk.CTkFrame):
         self._var_selecionado = tk.BooleanVar(value=False)
         self._chk_selecionar = ctk.CTkCheckBox(
             self, text="", width=20, variable=self._var_selecionado,
+            command=self._clicar_selecionar,
         )
         self._chk_selecionar.grid(row=0, column=0, padx=(12, 5), pady=10)
 
-        ctk.CTkLabel(
-            self, text=funcionario.nome_completo, anchor="w",
-            font=ctk.CTkFont(weight="bold"),
-        ).grid(row=0, column=1, sticky="w", padx=5)
+        self._rotulo_nome = ctk.CTkLabel(
+            self, anchor="w", font=ctk.CTkFont(weight="bold"))
+        self._rotulo_nome.grid(row=0, column=1, sticky="w", padx=5)
 
-        ctk.CTkLabel(self, text=funcionario.cargo or "—", anchor="w").grid(
-            row=0, column=2, sticky="w", padx=5)
-        ctk.CTkLabel(self, text=nome_setor, anchor="w").grid(
-            row=0, column=3, sticky="w", padx=5)
-        ctk.CTkLabel(self, text=nome_turno, anchor="w").grid(
-            row=0, column=4, sticky="w", padx=5)
+        self._rotulo_cargo = ctk.CTkLabel(self, anchor="w")
+        self._rotulo_cargo.grid(row=0, column=2, sticky="w", padx=5)
+        self._rotulo_setor = ctk.CTkLabel(self, anchor="w")
+        self._rotulo_setor.grid(row=0, column=3, sticky="w", padx=5)
+        self._rotulo_turno = ctk.CTkLabel(self, anchor="w")
+        self._rotulo_turno.grid(row=0, column=4, sticky="w", padx=5)
 
-        ativo = funcionario.status == StatusFuncionario.ATIVO
-        ctk.CTkLabel(
-            self, text=funcionario.status.value, width=64,
-            text_color=("#1e8449", "#2ecc71") if ativo else ("gray50", "gray50"),
-        ).grid(row=0, column=5, padx=5)
+        self._rotulo_status = ctk.CTkLabel(self, width=64)
+        self._rotulo_status.grid(row=0, column=5, padx=5)
 
-        self._botao_editar = ctk.CTkButton(self, text="Editar", width=70)
+        self._botao_editar = ctk.CTkButton(
+            self, text="Editar", width=70, command=lambda: self._chamar(ao_editar))
         self._botao_editar.grid(row=0, column=6, padx=(5, 5), pady=10)
 
         self._botao_alternar = ctk.CTkButton(
-            self, text="Inativar" if ativo else "Ativar", width=70,
-            fg_color="transparent", border_width=1,
+            self, text="", width=70, fg_color="transparent", border_width=1,
+            command=lambda: self._chamar(ao_alternar_status),
         )
         self._botao_alternar.grid(row=0, column=7, padx=(0, 5), pady=10)
 
         self._botao_excluir = ctk.CTkButton(
             self, text="Excluir", width=70, fg_color="#c0392b", hover_color="#992d22",
+            command=lambda: self._chamar(ao_excluir),
         )
         self._botao_excluir.grid(row=0, column=8, padx=(0, 12), pady=10)
 
-    def selecionado(self) -> bool:
-        return bool(self._var_selecionado.get())
+    def vincular(self, funcionario: Funcionario) -> None:
+        self.funcionario = funcionario
 
-    def definir_comando_selecionar(self, comando: Callable[[], None]) -> None:
-        self._chk_selecionar.configure(command=comando)
+        self._var_selecionado.set(self._esta_selecionado(funcionario.id))
+        self._rotulo_nome.configure(text=funcionario.nome_completo)
+        self._rotulo_cargo.configure(text=funcionario.cargo or "—")
+        self._rotulo_setor.configure(text=self._nome_setor_de(funcionario.setor_id))
+        self._rotulo_turno.configure(text=self._nome_turno_de(funcionario.turno_id))
 
-    def definir_comando_editar(self, comando: Callable[[], None]) -> None:
-        self._botao_editar.configure(command=comando)
+        ativo = funcionario.status == StatusFuncionario.ATIVO
+        self._rotulo_status.configure(
+            text=funcionario.status.value,
+            text_color=("#1e8449", "#2ecc71") if ativo else ("gray50", "gray50"),
+        )
+        self._botao_alternar.configure(text="Inativar" if ativo else "Ativar")
 
-    def definir_comando_alternar_status(self, comando: Callable[[], None]) -> None:
-        self._botao_alternar.configure(command=comando)
+    def _clicar_selecionar(self) -> None:
+        if self.funcionario is not None:
+            self._ao_alternar_selecao(self.funcionario.id, bool(self._var_selecionado.get()))
 
-    def definir_comando_excluir(self, comando: Callable[[], None]) -> None:
-        self._botao_excluir.configure(command=comando)
+    def _chamar(self, callback: Callable[[Funcionario], None]) -> None:
+        if self.funcionario is not None:
+            callback(self.funcionario)
 
 
 # ---------------------------------------------------------------------------
@@ -273,10 +296,8 @@ class TelaFuncionarios(ctk.CTkFrame):
         self.controlador = controlador
         self.config_app = config
 
-        self._linhas_funcionario: list[_LinhaFuncionario] = []
         self._selecionados: set[str] = set()
         self._funcionario_em_edicao_id: str | None = None
-        self._ordem_crescente: bool = True
         self._linhas_revisao: list[_LinhaRevisao] = []
         self._funcionarios_planilha_pendente: list[FuncionarioPlanilha] = []
         self._ao_concluir_calculo: Callable[[list[Funcionario]], None] | None = None
@@ -319,19 +340,14 @@ class TelaFuncionarios(ctk.CTkFrame):
         )
         self._rotulo_contadores.grid(row=0, column=2, padx=15)
 
-    # -- Barra de ferramentas: busca, filtro, ordenar, adicionar ---------------
+    # -- Barra de ferramentas: filtro, adicionar, exportar, imprimir -----------
 
     def _montar_barra_ferramentas(self) -> None:
         barra = ctk.CTkFrame(self, fg_color="transparent")
         barra.grid(row=1, column=0, sticky="ew", padx=30, pady=(15, 0))
-        barra.grid_columnconfigure(0, weight=1)
+        barra.grid_columnconfigure(3, weight=1)
 
-        self._entry_busca = ctk.CTkEntry(
-            barra, placeholder_text="Pesquisar por nome...",
-        )
-        self._entry_busca.grid(row=0, column=0, sticky="ew", padx=(0, 10))
-        self._entry_busca.bind("<KeyRelease>", lambda evento: self._carregar_lista())
-
+        ctk.CTkLabel(barra, text="Status").grid(row=0, column=0, padx=(0, 5))
         self._var_filtro_status = tk.StringVar(value="Todos")
         ctk.CTkOptionMenu(
             barra, values=["Todos", StatusFuncionario.ATIVO.value, StatusFuncionario.INATIVO.value],
@@ -339,22 +355,26 @@ class TelaFuncionarios(ctk.CTkFrame):
             command=lambda valor: self._carregar_lista(),
         ).grid(row=0, column=1, padx=(0, 10))
 
-        self._botao_ordenar = ctk.CTkButton(
-            barra, text="Nome ▲", width=90, fg_color="transparent", border_width=1,
-            command=self._alternar_ordenacao,
-        )
-        self._botao_ordenar.grid(row=0, column=2, padx=(0, 10))
-
         ctk.CTkButton(
             barra, text="+ Adicionar Funcionário", height=40,
             font=ctk.CTkFont(weight="bold"),
             command=lambda: self._mostrar_formulario(),
-        ).grid(row=0, column=3)
+        ).grid(row=0, column=2)
 
-    def _alternar_ordenacao(self) -> None:
-        self._ordem_crescente = not self._ordem_crescente
-        self._botao_ordenar.configure(text="Nome ▲" if self._ordem_crescente else "Nome ▼")
-        self._carregar_lista()
+        ctk.CTkButton(
+            barra, text="Imprimir", width=100, fg_color="transparent", border_width=1,
+            command=self._imprimir,
+        ).grid(row=0, column=4, padx=(10, 0))
+
+        BotaoExportar(
+            barra, titulo="Funcionários", colunas=["Nome", "Cargo", "Setor", "Turno", "Status"],
+            obter_registros=lambda: self._tabela.registros_filtrados(),
+            montar_linha=lambda f: (
+                f.nome_completo, f.cargo or "—", self._nome_setor(f.setor_id),
+                self._nome_turno(f.turno_id), f.status.value),
+            caminho_sugerido=lambda extensao: caminho_exportacao(
+                self.config_app, "Funcionarios", "Funcionarios", extensao),
+        ).grid(row=0, column=5, padx=(10, 0))
 
     # -- Barra de ações em massa (Cap. 5.9) -------------------------------------
 
@@ -695,13 +715,28 @@ class TelaFuncionarios(ctk.CTkFrame):
     # -- Lista de funcionários ---------------------------------------------------
 
     def _montar_lista(self) -> None:
-        self._scroll_funcionarios = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self._scroll_funcionarios.grid(row=4, column=0, sticky="nsew", padx=30, pady=15)
-
-        self._rotulo_lista_vazia = ctk.CTkLabel(
-            self._scroll_funcionarios, text="Nenhum funcionário cadastrado ainda.",
-            text_color=("gray60", "gray60"),
+        self._tabela = TabelaPadrao(
+            self,
+            criar_linha=lambda m: _LinhaFuncionario(
+                m, nome_turno_de=self._nome_turno, nome_setor_de=self._nome_setor,
+                esta_selecionado=lambda fid: fid in self._selecionados,
+                ao_alternar_selecao=self._alternar_selecao,
+                ao_editar=self._mostrar_formulario,
+                ao_alternar_status=self._alternar_status,
+                ao_excluir=self._excluir_funcionario,
+            ),
+            colunas=[
+                ColunaOrdenavel("Nome", lambda f: f.nome_completo.lower()),
+                ColunaOrdenavel("Cargo", lambda f: (f.cargo or "").lower()),
+                ColunaOrdenavel("Setor", lambda f: self._nome_setor(f.setor_id).lower()),
+                ColunaOrdenavel("Turno", lambda f: self._nome_turno(f.turno_id).lower()),
+                ColunaOrdenavel("Status", lambda f: f.status.value),
+            ],
+            campos_pesquisa=[lambda f: f.nome_completo, lambda f: f.matricula, lambda f: f.cpf],
+            placeholder_pesquisa="Pesquisar por nome, matrícula ou CPF...",
+            texto_vazio="Nenhum funcionário cadastrado ainda.",
         )
+        self._tabela.grid(row=4, column=0, sticky="nsew", padx=30, pady=15)
 
     def ao_exibir(self) -> None:
         """Recarrega a lista sempre que a tela é exibida (hook padrão do Sprint 1)."""
@@ -709,55 +744,25 @@ class TelaFuncionarios(ctk.CTkFrame):
 
     def _carregar_lista(self) -> None:
         """
-        (Re)constrói a lista de funcionários a partir de config.funcionarios,
-        aplicando pesquisa, filtro de status e ordenação alfabética.
-        Os contadores (Total/Ativos/Inativos) refletem sempre o cadastro
-        completo, independentemente do filtro/pesquisa atuais.
+        (Re)carrega a lista de funcionários a partir de config.funcionarios,
+        aplicando o filtro de status (pesquisa e ordenação já ficam por
+        conta de `TabelaPadrao`). Os contadores (Total/Ativos/Inativos)
+        refletem sempre o cadastro completo, independentemente do
+        filtro/pesquisa atuais.
         """
-        for linha in self._linhas_funcionario:
-            linha.destroy()
-        self._linhas_funcionario = []
-        self._rotulo_lista_vazia.pack_forget()
-
         dados_todos = self.config_app.funcionarios.get("funcionarios", [])
         todos = [funcionario_de_dict(d) for d in dados_todos]
         self._atualizar_contadores(todos)
 
-        termo_busca = self._entry_busca.get().strip().lower()
         filtro_status = self._var_filtro_status.get()
-
         visiveis = todos
-        if termo_busca:
-            visiveis = [f for f in visiveis if termo_busca in f.nome_completo.lower()]
         if filtro_status != "Todos":
             visiveis = [f for f in visiveis if f.status.value == filtro_status]
-
-        visiveis.sort(key=lambda f: f.nome_completo.lower(), reverse=not self._ordem_crescente)
-
-        if not visiveis:
-            self._rotulo_lista_vazia.pack(pady=20)
 
         ids_validos = {f.id for f in todos}
         self._selecionados &= ids_validos  # remove seleção de itens excluídos
 
-        for funcionario in visiveis:
-            linha = _LinhaFuncionario(
-                self._scroll_funcionarios, funcionario,
-                nome_turno=self._nome_turno(funcionario.turno_id),
-                nome_setor=self._nome_setor(funcionario.setor_id),
-            )
-            if funcionario.id in self._selecionados:
-                linha._var_selecionado.set(True)
-            linha.definir_comando_selecionar(
-                functools.partial(self._alternar_selecao, funcionario.id, linha))
-            linha.definir_comando_editar(functools.partial(self._mostrar_formulario, funcionario))
-            linha.definir_comando_alternar_status(
-                functools.partial(self._alternar_status, funcionario.id))
-            linha.definir_comando_excluir(functools.partial(
-                self._excluir_funcionario, funcionario.id, funcionario.nome_completo))
-            linha.pack(fill="x", pady=4)
-            self._linhas_funcionario.append(linha)
-
+        self._tabela.definir_registros(visiveis)
         self._atualizar_barra_massa()
 
     def _atualizar_contadores(self, funcionarios: list[Funcionario]) -> None:
@@ -768,46 +773,70 @@ class TelaFuncionarios(ctk.CTkFrame):
             text=f"Total: {total}   Ativos: {ativos}   Inativos: {inativos}"
         )
 
-    def _alternar_selecao(self, funcionario_id: str, linha: _LinhaFuncionario) -> None:
-        if linha.selecionado():
+    def _alternar_selecao(self, funcionario_id: str, selecionado: bool) -> None:
+        if selecionado:
             self._selecionados.add(funcionario_id)
         else:
             self._selecionados.discard(funcionario_id)
         self._atualizar_barra_massa()
 
+    def _imprimir(self) -> None:
+        """Impressão universal (Sprint 1): gera o Excel da lista e envia à impressora padrão."""
+        registros = self._tabela.registros_filtrados()
+        if not registros:
+            messagebox.showinfo("Imprimir", "Não há funcionários para imprimir.")
+            return
+        caminho = caminho_exportacao(self.config_app, "Funcionarios", "Funcionarios", "xlsx")
+        exportar_excel_simples(
+            caminho, "Funcionários", ["Nome", "Cargo", "Setor", "Turno", "Status"],
+            [(f.nome_completo, f.cargo or "—", self._nome_setor(f.setor_id),
+              self._nome_turno(f.turno_id), f.status.value) for f in registros],
+        )
+        try:
+            os.startfile(str(caminho), "print")  # type: ignore[attr-defined]
+            self.controlador.definir_status(f"Enviado para impressão: {caminho.name}")
+        except OSError as erro:
+            log.error("Falha ao imprimir funcionários: %s", erro)
+            messagebox.showerror(
+                "Não foi possível imprimir",
+                f"Não foi possível enviar para impressão automaticamente. "
+                f"O arquivo foi gerado em:\n{caminho}",
+            )
+
     # -- Ações individuais -----------------------------------------------------
 
-    def _alternar_status(self, funcionario_id: str) -> None:
+    def _alternar_status(self, funcionario: Funcionario) -> None:
         """Ativa/Inativa um único funcionário imediatamente."""
         for dados in self.config_app.funcionarios.get("funcionarios", []):
-            if dados.get("id") == funcionario_id:
-                funcionario = funcionario_de_dict(dados)
-                funcionario.status = (
-                    StatusFuncionario.INATIVO if funcionario.status == StatusFuncionario.ATIVO
+            if dados.get("id") == funcionario.id:
+                atual = funcionario_de_dict(dados)
+                atual.status = (
+                    StatusFuncionario.INATIVO if atual.status == StatusFuncionario.ATIVO
                     else StatusFuncionario.ATIVO
                 )
-                funcionario.ultima_atualizacao = _agora_texto()
+                atual.ultima_atualizacao = _agora_texto()
                 dados.clear()
-                dados.update(funcionario_para_dict(funcionario))
+                dados.update(funcionario_para_dict(atual))
                 break
 
         self.config_app.salvar_funcionarios()
         self._carregar_lista()
 
-    def _excluir_funcionario(self, funcionario_id: str, nome: str) -> None:
+    def _excluir_funcionario(self, funcionario: Funcionario) -> None:
         """Exclui um funcionário, com confirmação obrigatória."""
         confirmar = messagebox.askyesno(
             "Confirmar exclusão",
-            f'Excluir o funcionário "{nome}"? Esta ação não pode ser desfeita.',
+            f'Excluir o funcionário "{funcionario.nome_completo}"? '
+            "Esta ação não pode ser desfeita.",
         )
         if not confirmar:
             return
 
         funcionarios = self.config_app.funcionarios.get("funcionarios", [])
         self.config_app.funcionarios["funcionarios"] = [
-            dados for dados in funcionarios if dados.get("id") != funcionario_id
+            dados for dados in funcionarios if dados.get("id") != funcionario.id
         ]
-        self._selecionados.discard(funcionario_id)
+        self._selecionados.discard(funcionario.id)
         self.config_app.salvar_funcionarios()
         self._carregar_lista()
 

@@ -16,14 +16,16 @@ inteira mediante confirmação explícita.
 
 from __future__ import annotations
 
-import functools
 import os
 from pathlib import Path
 from tkinter import messagebox
+from typing import Callable
 
 import customtkinter as ctk
 
+from componentes import BotaoExportar, ColunaOrdenavel, TabelaPadrao
 from config import Config
+from exportacao import caminho_exportacao
 from logger import get_logger
 from modelos import ArquivoHistorico, CompetenciaHistorico
 from relatorio import excluir_historico, listar_competencias
@@ -45,44 +47,66 @@ def _tamanho_legivel(tamanho_bytes: int) -> str:
 class _LinhaArquivoHistorico(ctk.CTkFrame):
     """Uma linha de arquivo já exportado: nome, tamanho e o botão "Abrir"."""
 
-    def __init__(self, master, arquivo: ArquivoHistorico) -> None:
+    def __init__(self, master, ao_abrir: Callable[[Path], None]) -> None:
         super().__init__(master, fg_color="transparent")
-        self.arquivo = arquivo
+        self.arquivo: ArquivoHistorico | None = None
+        self._ao_abrir = ao_abrir
 
         self.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(self, text=arquivo.nome, anchor="w").grid(
-            row=0, column=0, sticky="w", padx=(20, 10))
-        ctk.CTkLabel(
-            self, text=_tamanho_legivel(arquivo.tamanho_bytes), anchor="w", width=70,
+        self._rotulo_nome = ctk.CTkLabel(self, anchor="w")
+        self._rotulo_nome.grid(row=0, column=0, sticky="w", padx=(20, 10))
+        self._rotulo_tamanho = ctk.CTkLabel(
+            self, anchor="w", width=70,
             text_color=("gray60", "gray60"), font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=1, padx=(0, 10))
-        ctk.CTkLabel(
-            self, text=arquivo.modificado_em.strftime("%d/%m/%Y %H:%M"), anchor="w", width=120,
+        )
+        self._rotulo_tamanho.grid(row=0, column=1, padx=(0, 10))
+        self._rotulo_data = ctk.CTkLabel(
+            self, anchor="w", width=120,
             text_color=("gray60", "gray60"), font=ctk.CTkFont(size=12),
-        ).grid(row=0, column=2, padx=(0, 10))
+        )
+        self._rotulo_data.grid(row=0, column=2, padx=(0, 10))
 
-        self._botao_abrir = ctk.CTkButton(self, text="Abrir", width=80)
+        self._botao_abrir = ctk.CTkButton(
+            self, text="Abrir", width=80, command=self._clicar_abrir)
         self._botao_abrir.grid(row=0, column=3, padx=(0, 10), pady=3)
 
-    def definir_comando_abrir(self, comando) -> None:
-        self._botao_abrir.configure(command=comando)
+    def vincular(self, arquivo: ArquivoHistorico) -> None:
+        self.arquivo = arquivo
+        self._rotulo_nome.configure(text=arquivo.nome)
+        self._rotulo_tamanho.configure(text=_tamanho_legivel(arquivo.tamanho_bytes))
+        self._rotulo_data.configure(text=arquivo.modificado_em.strftime("%d/%m/%Y %H:%M"))
+
+    def _clicar_abrir(self) -> None:
+        if self.arquivo is not None:
+            self._ao_abrir(self.arquivo.caminho)
 
 
 # ---------------------------------------------------------------------------
-# Card de uma competência
+# Card de uma competência (linha reaproveitável do pool — Sprint 1, v2.1)
 # ---------------------------------------------------------------------------
 
 class _CardCompetencia(ctk.CTkFrame):
     """
     Card de uma competência: informações básicas (lidas do relatório já
     exportado, nunca recalculadas), a lista de arquivos daquela
-    competência e o botão "Excluir Histórico".
+    competência e o botão "Excluir Histórico". A sublista de arquivos
+    varia de tamanho por competência, então é reconstruída a cada
+    `vincular()` — só o card em si é reaproveitado pelo pool de
+    `TabelaPadrao` (o que importa para desempenho é não recriar os
+    cards a cada rolagem/pesquisa, não a sublista interna, tipicamente
+    pequena).
     """
 
-    def __init__(self, master, competencia: CompetenciaHistorico) -> None:
+    def __init__(
+        self, master,
+        ao_abrir_arquivo: Callable[[Path], None],
+        ao_excluir: Callable[[CompetenciaHistorico], None],
+    ) -> None:
         super().__init__(master, corner_radius=10, border_width=1)
-        self.competencia = competencia
+        self.competencia: CompetenciaHistorico | None = None
+        self._ao_abrir_arquivo = ao_abrir_arquivo
+        self._ao_excluir = ao_excluir
         self._linhas_arquivo: list[_LinhaArquivoHistorico] = []
 
         self.grid_columnconfigure(0, weight=1)
@@ -91,41 +115,48 @@ class _CardCompetencia(ctk.CTkFrame):
         cabecalho.grid(row=0, column=0, sticky="ew", padx=15, pady=(12, 5))
         cabecalho.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(
-            cabecalho, text=competencia.competencia_texto,
-            font=ctk.CTkFont(size=16, weight="bold"), anchor="w",
-        ).grid(row=0, column=0, sticky="w")
+        self._rotulo_titulo = ctk.CTkLabel(
+            cabecalho, font=ctk.CTkFont(size=16, weight="bold"), anchor="w")
+        self._rotulo_titulo.grid(row=0, column=0, sticky="w")
 
         self._botao_excluir = ctk.CTkButton(
             cabecalho, text="Excluir Histórico", width=150,
-            fg_color="#c0392b", hover_color="#992d22",
+            fg_color="#c0392b", hover_color="#992d22", command=self._clicar_excluir,
         )
         self._botao_excluir.grid(row=0, column=1, sticky="e")
 
-        info = (
+        self._rotulo_info = ctk.CTkLabel(
+            self, anchor="w", justify="left", wraplength=900,
+            text_color=("gray60", "gray60"), font=ctk.CTkFont(size=12),
+        )
+        self._rotulo_info.grid(row=1, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 10))
+
+        self._frame_arquivos = ctk.CTkFrame(self, fg_color="transparent")
+        self._frame_arquivos.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 12))
+
+    def vincular(self, competencia: CompetenciaHistorico) -> None:
+        self.competencia = competencia
+        self._rotulo_titulo.configure(text=competencia.competencia_texto)
+        self._rotulo_info.configure(text=(
             f"Empresa: {competencia.nome_empresa or '—'}    "
             f"Funcionários processados: {competencia.quantidade_funcionarios}    "
             f"Pendências: {competencia.quantidade_pendencias}    "
             f"Processado em: {competencia.data_processamento} {competencia.hora_processamento}    "
             f"{len(competencia.arquivos)} relatório(s)"
-        )
-        ctk.CTkLabel(
-            self, text=info, anchor="w", justify="left", wraplength=900,
-            text_color=("gray60", "gray60"), font=ctk.CTkFont(size=12),
-        ).grid(row=1, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 10))
+        ))
 
-        frame_arquivos = ctk.CTkFrame(self, fg_color="transparent")
-        frame_arquivos.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 12))
+        for linha in self._linhas_arquivo:
+            linha.destroy()
+        self._linhas_arquivo = []
         for arquivo in competencia.arquivos:
-            linha = _LinhaArquivoHistorico(frame_arquivos, arquivo)
+            linha = _LinhaArquivoHistorico(self._frame_arquivos, ao_abrir=self._ao_abrir_arquivo)
+            linha.vincular(arquivo)
             linha.pack(fill="x", pady=2)
             self._linhas_arquivo.append(linha)
 
-    def definir_comando_excluir(self, comando) -> None:
-        self._botao_excluir.configure(command=comando)
-
-    def linhas_arquivo(self) -> list[_LinhaArquivoHistorico]:
-        return self._linhas_arquivo
+    def _clicar_excluir(self) -> None:
+        if self.competencia is not None:
+            self._ao_excluir(self.competencia)
 
 
 # ---------------------------------------------------------------------------
@@ -141,13 +172,11 @@ class TelaHistorico(ctk.CTkFrame):
         self.controlador = controlador
         self.config_app = config
         self._competencias: list[CompetenciaHistorico] = []
-        self._cards: list[_CardCompetencia] = []
 
-        self.grid_rowconfigure(2, weight=1)
+        self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         self._montar_cabecalho()
-        self._montar_pesquisa()
         self._montar_lista()
 
     # -- Construção da UI -----------------------------------------------------
@@ -167,25 +196,29 @@ class TelaHistorico(ctk.CTkFrame):
             font=ctk.CTkFont(size=20, weight="bold"),
         ).grid(row=0, column=1, sticky="w", padx=10)
 
-    def _montar_pesquisa(self) -> None:
-        barra = ctk.CTkFrame(self, fg_color="transparent")
-        barra.grid(row=1, column=0, sticky="ew", padx=30, pady=(15, 0))
-        barra.grid_columnconfigure(0, weight=1)
-
-        self._entry_pesquisa = ctk.CTkEntry(
-            barra, placeholder_text="Pesquisar competência (ex.: Julho, 2026)...",
-        )
-        self._entry_pesquisa.grid(row=0, column=0, sticky="ew")
-        self._entry_pesquisa.bind("<KeyRelease>", lambda evento: self._filtrar())
+        BotaoExportar(
+            cabecalho, titulo="Histórico", colunas=["Competência", "Empresa", "Relatórios"],
+            obter_registros=lambda: self._tabela.registros_filtrados(),
+            montar_linha=lambda c: (
+                c.competencia_texto, c.nome_empresa or "—", len(c.arquivos)),
+            caminho_sugerido=lambda extensao: caminho_exportacao(
+                self.config_app, "Historico", "Historico", extensao),
+        ).grid(row=0, column=2, padx=15)
 
     def _montar_lista(self) -> None:
-        self._scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self._scroll.grid(row=2, column=0, sticky="nsew", padx=30, pady=15)
-
-        self._rotulo_vazio = ctk.CTkLabel(
-            self._scroll, text="Nenhum histórico encontrado.",
-            text_color=("gray60", "gray60"),
+        self._tabela = TabelaPadrao(
+            self,
+            criar_linha=lambda m: _CardCompetencia(
+                m, ao_abrir_arquivo=self._abrir_arquivo, ao_excluir=self._excluir),
+            colunas=[
+                ColunaOrdenavel("Competência", lambda c: (c.ano, c.mes)),
+                ColunaOrdenavel("Pendências", lambda c: c.quantidade_pendencias),
+            ],
+            campos_pesquisa=[lambda c: c.competencia_texto, lambda c: c.nome_empresa],
+            placeholder_pesquisa="Pesquisar competência (ex.: Julho, 2026)...",
+            texto_vazio="Nenhum histórico encontrado.",
         )
+        self._tabela.grid(row=1, column=0, sticky="nsew", padx=30, pady=15)
 
     # -- Ciclo de vida ----------------------------------------------------------
 
@@ -195,39 +228,7 @@ class TelaHistorico(ctk.CTkFrame):
 
     def _carregar(self) -> None:
         self._competencias = listar_competencias(self.config_app)
-        self._entry_pesquisa.delete(0, "end")
-        self._renderizar(self._competencias)
-
-    # -- Pesquisa (Cap. 12.6) ----------------------------------------------------
-
-    def _filtrar(self) -> None:
-        termo = self._entry_pesquisa.get().strip().casefold()
-        if not termo:
-            self._renderizar(self._competencias)
-            return
-        filtradas = [c for c in self._competencias if termo in c.competencia_texto.casefold()]
-        self._renderizar(filtradas)
-
-    # -- Renderização -------------------------------------------------------------
-
-    def _renderizar(self, competencias: list[CompetenciaHistorico]) -> None:
-        for card in self._cards:
-            card.destroy()
-        self._cards = []
-        self._rotulo_vazio.pack_forget()
-
-        if not competencias:
-            self._rotulo_vazio.pack(pady=30)
-            return
-
-        for competencia in competencias:
-            card = _CardCompetencia(self._scroll, competencia)
-            for linha in card.linhas_arquivo():
-                linha.definir_comando_abrir(
-                    functools.partial(self._abrir_arquivo, linha.arquivo.caminho))
-            card.definir_comando_excluir(functools.partial(self._excluir, competencia))
-            card.pack(fill="x", pady=6)
-            self._cards.append(card)
+        self._tabela.definir_registros(self._competencias)
 
     # -- Ações --------------------------------------------------------------------
 

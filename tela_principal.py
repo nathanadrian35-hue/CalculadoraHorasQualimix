@@ -117,6 +117,7 @@ class TelaPrincipal(ctk.CTkFrame):
             ("Setores", lambda: self.controlador.mostrar_tela("setores")),
             ("Competências", lambda: self.controlador.mostrar_tela("competencias")),
             ("Dashboard", lambda: self.controlador.mostrar_tela("dashboard")),
+            ("Absenteísmo", lambda: self.controlador.mostrar_tela("absenteismo")),
             ("Relatórios", lambda: self.controlador.mostrar_tela("relatorios")),
             ("Configurações", lambda: self.controlador.mostrar_tela("configuracoes")),
             ("Histórico", lambda: self.controlador.mostrar_tela("historico")),

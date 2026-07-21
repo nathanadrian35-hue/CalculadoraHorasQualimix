@@ -62,6 +62,8 @@ Pillow
 
 PyInstaller
 
+ReportLab (exportação em PDF, aprovado na v2.1)
+
 ---
 
 # Estrutura do Projeto

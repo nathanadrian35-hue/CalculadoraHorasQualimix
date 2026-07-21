@@ -20,14 +20,17 @@ versão (decisão confirmada com o usuário).
 
 from __future__ import annotations
 
-import functools
+import os
 from tkinter import messagebox
+from typing import Callable
 
 import customtkinter as ctk
 
 import competencias
+from componentes import BotaoExportar, ColunaOrdenavel, TabelaPadrao
 from config import Config
 from constantes import StatusCompetencia, StatusSimplificado, nome_mes
+from exportacao import caminho_exportacao, exportar_excel_simples
 from logger import get_logger
 from modelos import Competencia
 
@@ -67,9 +70,19 @@ class _CardCompetencia(ctk.CTkFrame):
     — importações e auditoria) e "Arquivar".
     """
 
-    def __init__(self, master, competencia: Competencia) -> None:
+    def __init__(
+        self, master,
+        ao_abrir: Callable[[Competencia], None],
+        ao_arquivar: Callable[[Competencia], None],
+        ao_alternar_fechamento: Callable[[Competencia], None],
+        ao_abrir_historico: Callable[[Competencia], None],
+    ) -> None:
         super().__init__(master, corner_radius=10, border_width=1)
-        self.competencia = competencia
+        self.competencia: Competencia | None = None
+        self._ao_abrir = ao_abrir
+        self._ao_arquivar = ao_arquivar
+        self._ao_alternar_fechamento = ao_alternar_fechamento
+        self._ao_abrir_historico = ao_abrir_historico
 
         self.grid_columnconfigure(0, weight=1)
 
@@ -77,72 +90,89 @@ class _CardCompetencia(ctk.CTkFrame):
         cabecalho.grid(row=0, column=0, sticky="ew", padx=15, pady=(12, 5))
         cabecalho.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(
-            cabecalho, text=f"{nome_mes(competencia.mes)}/{competencia.ano}",
-            font=ctk.CTkFont(size=16, weight="bold"), anchor="w",
-        ).grid(row=0, column=0, sticky="w")
+        self._rotulo_titulo = ctk.CTkLabel(
+            cabecalho, font=ctk.CTkFont(size=16, weight="bold"), anchor="w")
+        self._rotulo_titulo.grid(row=0, column=0, sticky="w")
 
-        cor = _CORES_STATUS.get(competencia.status, ("gray50", "gray50"))
-        ctk.CTkLabel(
-            cabecalho, text=competencia.status.value, text_color=cor, width=150,
-            font=ctk.CTkFont(weight="bold"), anchor="w",
-        ).grid(row=0, column=1, padx=(0, 10))
+        self._rotulo_status = ctk.CTkLabel(
+            cabecalho, width=150, font=ctk.CTkFont(weight="bold"), anchor="w")
+        self._rotulo_status.grid(row=0, column=1, padx=(0, 10))
 
-        selo = competencias.status_simplificado(competencia)
-        cor_selo = _CORES_SIMPLIFICADO.get(selo, ("gray50", "gray50"))
-        ctk.CTkLabel(
-            cabecalho, text=selo.value, text_color=cor_selo, width=170,
-            font=ctk.CTkFont(weight="bold"), anchor="w",
-        ).grid(row=0, column=2, padx=(0, 10))
+        self._rotulo_selo = ctk.CTkLabel(
+            cabecalho, width=170, font=ctk.CTkFont(weight="bold"), anchor="w")
+        self._rotulo_selo.grid(row=0, column=2, padx=(0, 10))
 
         self._botao_fechar = ctk.CTkButton(
-            cabecalho, text=("Reabrir" if competencia.fechada else "Fechar"),
-            width=90, fg_color="transparent", border_width=1,
+            cabecalho, width=90, fg_color="transparent", border_width=1,
+            command=self._clicar_alternar_fechamento,
         )
         self._botao_fechar.grid(row=0, column=3, padx=(0, 10))
 
         self._botao_historico = ctk.CTkButton(
             cabecalho, text="Histórico", width=90, fg_color="transparent", border_width=1,
+            command=self._clicar_historico,
         )
         self._botao_historico.grid(row=0, column=4, padx=(0, 10))
 
         self._botao_arquivar = ctk.CTkButton(
             cabecalho, text="Arquivar", width=100, fg_color="transparent", border_width=1,
+            command=self._clicar_arquivar,
         )
         self._botao_arquivar.grid(row=0, column=5, padx=(0, 10))
-        if competencia.status == StatusCompetencia.ARQUIVADA:
-            self._botao_arquivar.configure(state="disabled")
 
-        self._botao_abrir = ctk.CTkButton(cabecalho, text="Abrir", width=100)
+        self._botao_abrir = ctk.CTkButton(
+            cabecalho, text="Abrir", width=100, command=self._clicar_abrir)
         self._botao_abrir.grid(row=0, column=6)
+
+        self._rotulo_info = ctk.CTkLabel(
+            self, anchor="w", justify="left", wraplength=900,
+            text_color=("gray60", "gray60"), font=ctk.CTkFont(size=12),
+        )
+        self._rotulo_info.grid(row=1, column=0, sticky="w", padx=15, pady=(0, 12))
+
+    def vincular(self, competencia: Competencia) -> None:
+        self.competencia = competencia
+
+        self._rotulo_titulo.configure(text=f"{nome_mes(competencia.mes)}/{competencia.ano}")
+
+        cor = _CORES_STATUS.get(competencia.status, ("gray50", "gray50"))
+        self._rotulo_status.configure(text=competencia.status.value, text_color=cor)
+
+        selo = competencias.status_simplificado(competencia)
+        cor_selo = _CORES_SIMPLIFICADO.get(selo, ("gray50", "gray50"))
+        self._rotulo_selo.configure(text=selo.value, text_color=cor_selo)
+
+        self._botao_fechar.configure(text="Reabrir" if competencia.fechada else "Fechar")
+        self._botao_arquivar.configure(
+            state="disabled" if competencia.status == StatusCompetencia.ARQUIVADA else "normal")
 
         total_pendencias = len(competencia.resultado.pendencias)
         abertas = sum(1 for p in competencia.resultado.pendencias if not p.resolvida)
         resolvidas = total_pendencias - abertas
-        info = (
+        self._rotulo_info.configure(text=(
             f"Data da importação: {competencia.data_importacao}    "
             f"Funcionários: {len(competencia.resultado.funcionarios_processados)}    "
             f"Importações: {competencia.quantidade_importacoes}    "
             f"Pendências: {total_pendencias} "
             f"({resolvidas} resolvida(s), {abertas} em aberto)    "
             f"Relatório gerado: {'Sim' if competencia.relatorio_gerado else 'Não'}"
-        )
-        ctk.CTkLabel(
-            self, text=info, anchor="w", justify="left", wraplength=900,
-            text_color=("gray60", "gray60"), font=ctk.CTkFont(size=12),
-        ).grid(row=1, column=0, sticky="w", padx=15, pady=(0, 12))
+        ))
 
-    def definir_comando_abrir(self, comando) -> None:
-        self._botao_abrir.configure(command=comando)
+    def _clicar_abrir(self) -> None:
+        if self.competencia is not None:
+            self._ao_abrir(self.competencia)
 
-    def definir_comando_arquivar(self, comando) -> None:
-        self._botao_arquivar.configure(command=comando)
+    def _clicar_arquivar(self) -> None:
+        if self.competencia is not None:
+            self._ao_arquivar(self.competencia)
 
-    def definir_comando_fechar(self, comando) -> None:
-        self._botao_fechar.configure(command=comando)
+    def _clicar_alternar_fechamento(self) -> None:
+        if self.competencia is not None:
+            self._ao_alternar_fechamento(self.competencia)
 
-    def definir_comando_historico(self, comando) -> None:
-        self._botao_historico.configure(command=comando)
+    def _clicar_historico(self) -> None:
+        if self.competencia is not None:
+            self._ao_abrir_historico(self.competencia)
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +188,6 @@ class TelaCompetencias(ctk.CTkFrame):
         self.controlador = controlador
         self.config_app = config
         self._competencias: list[Competencia] = []
-        self._cards: list[_CardCompetencia] = []
 
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -183,14 +212,40 @@ class TelaCompetencias(ctk.CTkFrame):
             font=ctk.CTkFont(size=20, weight="bold"),
         ).grid(row=0, column=1, sticky="w", padx=10)
 
-    def _montar_lista(self) -> None:
-        self._scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self._scroll.grid(row=1, column=0, sticky="nsew", padx=30, pady=15)
+        ctk.CTkButton(
+            cabecalho, text="Imprimir", width=100, fg_color="transparent", border_width=1,
+            command=self._imprimir,
+        ).grid(row=0, column=2, padx=(0, 10))
 
-        self._rotulo_vazio = ctk.CTkLabel(
-            self._scroll, text="Nenhuma competência importada ainda.",
-            text_color=("gray60", "gray60"),
+        BotaoExportar(
+            cabecalho, titulo="Competências", colunas=["Competência", "Status", "Pendências"],
+            obter_registros=lambda: self._tabela.registros_filtrados(),
+            montar_linha=lambda c: (
+                f"{nome_mes(c.mes)}/{c.ano}", c.status.value,
+                sum(1 for p in c.resultado.pendencias if not p.resolvida)),
+            caminho_sugerido=lambda extensao: caminho_exportacao(
+                self.config_app, "Competencias", "Competencias", extensao),
+        ).grid(row=0, column=3, padx=(0, 15))
+
+    def _montar_lista(self) -> None:
+        self._tabela = TabelaPadrao(
+            self,
+            criar_linha=lambda m: _CardCompetencia(
+                m, ao_abrir=self._abrir, ao_arquivar=self._arquivar,
+                ao_alternar_fechamento=self._alternar_fechamento,
+                ao_abrir_historico=self._abrir_historico,
+            ),
+            colunas=[
+                ColunaOrdenavel("Competência", lambda c: (c.ano, c.mes)),
+                ColunaOrdenavel(
+                    "Pendências", lambda c: sum(
+                        1 for p in c.resultado.pendencias if not p.resolvida)),
+            ],
+            campos_pesquisa=[lambda c: f"{nome_mes(c.mes)}/{c.ano}"],
+            placeholder_pesquisa="Pesquisar competência (ex.: Julho, 2026)...",
+            texto_vazio="Nenhuma competência importada ainda.",
         )
+        self._tabela.grid(row=1, column=0, sticky="nsew", padx=30, pady=15)
 
     # -- Ciclo de vida ---------------------------------------------------------
 
@@ -200,28 +255,30 @@ class TelaCompetencias(ctk.CTkFrame):
 
     def _carregar(self) -> None:
         self._competencias = competencias.listar()
-        self._renderizar()
+        self._tabela.definir_registros(self._competencias)
 
-    # -- Renderização -----------------------------------------------------------
-
-    def _renderizar(self) -> None:
-        for card in self._cards:
-            card.destroy()
-        self._cards = []
-        self._rotulo_vazio.pack_forget()
-
-        if not self._competencias:
-            self._rotulo_vazio.pack(pady=30)
+    def _imprimir(self) -> None:
+        """Impressão universal (Sprint 1): gera o Excel da lista e envia à impressora padrão."""
+        registros = self._tabela.registros_filtrados()
+        if not registros:
+            messagebox.showinfo("Imprimir", "Não há competências para imprimir.")
             return
-
-        for competencia in self._competencias:
-            card = _CardCompetencia(self._scroll, competencia)
-            card.definir_comando_abrir(functools.partial(self._abrir, competencia))
-            card.definir_comando_arquivar(functools.partial(self._arquivar, competencia))
-            card.definir_comando_fechar(functools.partial(self._alternar_fechamento, competencia))
-            card.definir_comando_historico(functools.partial(self._abrir_historico, competencia))
-            card.pack(fill="x", pady=6)
-            self._cards.append(card)
+        caminho = caminho_exportacao(self.config_app, "Competencias", "Competencias", "xlsx")
+        exportar_excel_simples(
+            caminho, "Competências", ["Competência", "Status", "Pendências"],
+            [(f"{nome_mes(c.mes)}/{c.ano}", c.status.value,
+              sum(1 for p in c.resultado.pendencias if not p.resolvida)) for c in registros],
+        )
+        try:
+            os.startfile(str(caminho), "print")  # type: ignore[attr-defined]
+            self.controlador.definir_status(f"Enviado para impressão: {caminho.name}")
+        except OSError as erro:
+            log.error("Falha ao imprimir competências: %s", erro)
+            messagebox.showerror(
+                "Não foi possível imprimir",
+                f"Não foi possível enviar para impressão automaticamente. "
+                f"O arquivo foi gerado em:\n{caminho}",
+            )
 
     # -- Ações --------------------------------------------------------------------
 

@@ -85,6 +85,9 @@ class Justificativa(str, Enum):
     ESQUECEU_BATER = "Esqueceu de bater"
     PONTO_NAO_REGISTROU = "Ponto não registrou"
     OUTRO = "Outro"
+    LICENCA_MATERNIDADE = "Licença Maternidade"  # v2.1 Sprint 2 (Absenteísmo, Cap. 45)
+    LICENCA_PATERNIDADE = "Licença Paternidade"  # v2.1 Sprint 2 (Absenteísmo, Cap. 45)
+    FERIADO = "Feriado"  # v2.1 Sprint 2 (Absenteísmo, Cap. 45)
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +103,12 @@ JUSTIFICATIVAS_QUE_ELIMINAM_HORA_NEGATIVA: frozenset[Justificativa] = frozenset(
     Justificativa.FERIAS,
     Justificativa.FOLGA,
     Justificativa.LICENCA,
+    # v2.1 Sprint 2: mesma natureza de ausência legalmente amparada das
+    # justificativas acima — nenhuma delas deveria continuar acusando
+    # Hora Negativa depois de justificada.
+    Justificativa.LICENCA_MATERNIDADE,
+    Justificativa.LICENCA_PATERNIDADE,
+    Justificativa.FERIADO,
 })
 
 
@@ -230,3 +239,24 @@ def formatar_minutos(minutos: int) -> str:
     sinal = "-" if minutos < 0 else ""
     horas, resto = divmod(abs(minutos), 60)
     return f"{sinal}{horas}h{resto:02d}"
+
+
+# ---------------------------------------------------------------------------
+# Absenteísmo (v2.1 Sprint 2, Cap. 41-80) — motor em absenteismo.py
+# ---------------------------------------------------------------------------
+
+class MetodoCalculoAbsenteismo(str, Enum):
+    """
+    Como o índice de absenteísmo é expresso (Cap. 47) — configurável
+    pelo administrador (Cap. 46/67), nunca fixo no código.
+    """
+
+    DIAS = "Dias"
+    HORAS = "Horas"
+    PERCENTUAL = "Percentual"
+
+
+# Limiares padrão de classificação por cor (Cap. 55) — configuráveis pelo
+# administrador; estes são só o valor inicial de uma competência nova.
+LIMIAR_ABSENTEISMO_ATENCAO_PADRAO: float = 2.0
+LIMIAR_ABSENTEISMO_CRITICO_PADRAO: float = 5.0

@@ -29,6 +29,10 @@ from typing import TYPE_CHECKING
 
 from constantes import (
     GRAFIAS_SETOR_PADRAO,
+    LIMIAR_ABSENTEISMO_ATENCAO_PADRAO,
+    LIMIAR_ABSENTEISMO_CRITICO_PADRAO,
+    Justificativa,
+    MetodoCalculoAbsenteismo,
     Situacao,
     SituacaoSugestao,
     StatusCompetencia,
@@ -924,3 +928,121 @@ class CompetenciaHistorico:
     quantidade_pendencias: str = "—"
     data_processamento: str = "—"
     hora_processamento: str = "—"
+
+
+# ---------------------------------------------------------------------------
+# Absenteísmo (v2.1 Sprint 2, Cap. 41-80) — motor em absenteismo.py
+#
+# Utiliza exclusivamente o que já está calculado em `DiaTrabalho.resultado`
+# e `Pendencia.justificativa` (Cap. 6/9/10) — nenhuma hora é recalculada
+# aqui, só reclassificada/agregada segundo a configuração abaixo.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ConfiguracaoOcorrencia:
+    """
+    Configuração de uma Justificativa para fins de índice de
+    absenteísmo (Cap. 45/46): se ela conta como ausência no índice,
+    mais aparência (cor/ícone) para o Dashboard/relatórios. Não
+    redefine a Justificativa em si (que continua um Enum fixo,
+    Cap. 9.6) — só adiciona metadados de configuração por cima.
+    """
+
+    justificativa: Justificativa
+    considerar_no_indice: bool = False
+    cor: str = "#3498db"
+    icone: str = "📌"
+    ativa: bool = True
+
+
+@dataclass
+class ConfiguracaoAbsenteismo:
+    """
+    Configuração vigente do módulo de Absenteísmo (Cap. 46/67) —
+    versionada: cada alteração salva incrementa `versao` e registra um
+    evento em `auditoria` (reaproveita `RegistroAuditoria`, já usado
+    pela auditoria de Competências, Cap. novo v2.0). Um
+    `IndicadorAbsenteismo` já calculado guarda a `versao` vigente no
+    momento do cálculo — reabrir a tela de configuração e mudar um
+    parâmetro nunca altera silenciosamente um índice histórico
+    (Cap. 57: "nunca recalcular índices antigos utilizando regras
+    novas").
+    """
+
+    metodo: MetodoCalculoAbsenteismo = MetodoCalculoAbsenteismo.PERCENTUAL
+    ocorrencias: list[ConfiguracaoOcorrencia] = field(default_factory=list)
+    limiar_atencao: float = LIMIAR_ABSENTEISMO_ATENCAO_PADRAO
+    limiar_critico: float = LIMIAR_ABSENTEISMO_CRITICO_PADRAO
+    versao: int = 1
+    atualizado_em: str = ""
+    auditoria: list["RegistroAuditoria"] = field(default_factory=list)
+
+    def justificativas_consideradas(self) -> frozenset[Justificativa]:
+        """Conjunto de Justificativas atualmente marcadas para contar no índice."""
+        return frozenset(
+            oc.justificativa for oc in self.ocorrencias
+            if oc.considerar_no_indice and oc.ativa
+        )
+
+
+@dataclass
+class OcorrenciaAbsenteismo:
+    """Uma ocorrência individual (um dia) que entrou no cálculo de um indicador (Cap. 48)."""
+
+    data: date
+    justificativa: Justificativa
+    considerada: bool
+
+
+@dataclass
+class IndicadorAbsenteismo:
+    """
+    Índice de absenteísmo de um funcionário numa competência (Cap. 47/
+    48/66) — agregação pura sobre dias já calculados pelo Motor
+    (Cap. 6), nunca um cálculo de horas novo. Carrega tudo que a
+    "Memória de Cálculo" (Cap. 48/66) precisa exibir: nada aqui é
+    reconstruído a partir de outro lugar depois de calculado.
+    """
+
+    funcionario_id: str
+    nome: str
+    competencia_texto: str
+    dias_previstos: int = 0
+    dias_perdidos: int = 0
+    horas_previstas_min: int = 0
+    horas_trabalhadas_min: int = 0
+    horas_perdidas_min: int = 0
+    ocorrencias: list[OcorrenciaAbsenteismo] = field(default_factory=list)
+    metodo: MetodoCalculoAbsenteismo = MetodoCalculoAbsenteismo.PERCENTUAL
+    configuracao_versao: int = 1
+
+    @property
+    def ocorrencias_consideradas(self) -> list[OcorrenciaAbsenteismo]:
+        return [o for o in self.ocorrencias if o.considerada]
+
+    @property
+    def ocorrencias_ignoradas(self) -> list[OcorrenciaAbsenteismo]:
+        return [o for o in self.ocorrencias if not o.considerada]
+
+    @property
+    def resultado_percentual(self) -> float:
+        """Horas perdidas ÷ horas previstas × 100 (Cap. 49) — 0.0 se não houver jornada prevista."""
+        if self.horas_previstas_min <= 0:
+            return 0.0
+        return round((self.horas_perdidas_min / self.horas_previstas_min) * 100, 2)
+
+    @property
+    def resultado_dias(self) -> float:
+        return float(self.dias_perdidos)
+
+    @property
+    def resultado_horas_min(self) -> int:
+        return self.horas_perdidas_min
+
+    def resultado_no_metodo(self) -> float:
+        """Resultado final já no método configurado (Cap. 47) — o que o Dashboard exibe."""
+        if self.metodo == MetodoCalculoAbsenteismo.DIAS:
+            return self.resultado_dias
+        if self.metodo == MetodoCalculoAbsenteismo.HORAS:
+            return float(self.resultado_horas_min)
+        return self.resultado_percentual
